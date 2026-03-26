@@ -1,0 +1,323 @@
+{
+  "version": "1.1.0",
+  "meta": {
+    "name": "Onchain Automation Action Catalogue",
+    "description": "Source of truth for supported actions, required fields, validation hints, and integration requirements."
+  },
+  "field_definitions": {
+    "token_address": {
+      "type": "evm_address",
+      "question": "What is the token contract address?"
+    },
+    "recipient_address": {
+      "type": "evm_address",
+      "question": "What is the recipient wallet address?"
+    },
+    "amount": {
+      "type": "number",
+      "question": "What amount should be used?"
+    },
+    "recipients": {
+      "type": "array",
+      "question": "Please provide the recipients list."
+    },
+    "dex_name": {
+      "type": "string",
+      "question": "Which DEX should I use? Example: Uniswap, PancakeSwap"
+    },
+    "dex_router": {
+      "type": "evm_address",
+      "question": "What is the DEX router address?"
+    },
+    "token_in": {
+      "type": "evm_address",
+      "question": "What is the input token address?"
+    },
+    "token_out": {
+      "type": "evm_address",
+      "question": "What is the output token address?"
+    },
+    "amount_in": {
+      "type": "number",
+      "question": "How much input token should be swapped?"
+    },
+    "amount_out": {
+      "type": "number",
+      "question": "How much output token should be received?"
+    },
+    "max_amount_in": {
+      "type": "number",
+      "question": "What is the maximum input amount allowed?"
+    },
+    "slippage_bps": {
+      "type": "number",
+      "question": "What slippage in basis points should I use? Example: 100 for 1%"
+    },
+    "faucet_url": {
+      "type": "url",
+      "question": "What is the faucet URL?"
+    },
+    "claim_method": {
+      "type": "string",
+      "question": "How should the faucet be claimed? Example: http_get, http_post, wallet_sign, browser"
+    },
+    "requires_api": {
+      "type": "boolean",
+      "question": "Does this action require an external API?"
+    },
+    "api_url": {
+      "type": "url",
+      "question": "What API URL should be used?"
+    },
+    "requires_browser": {
+      "type": "boolean",
+      "question": "Does this flow require browser automation?"
+    },
+    "requires_login": {
+      "type": "boolean",
+      "question": "Does this flow require login?"
+    },
+    "requires_captcha": {
+      "type": "boolean",
+      "question": "Does this flow require captcha solving?"
+    },
+    "platform_type": {
+      "type": "string",
+      "question": "Is this executed through direct contract call, API, marketplace, or browser flow?"
+    },
+    "platform_name": {
+      "type": "string",
+      "question": "Which platform should I use? Example: OpenSea, Blur, Magic Eden"
+    },
+    "to": {
+      "type": "email",
+      "question": "Which email should receive the notification?"
+    },
+    "subject": {
+      "type": "string",
+      "question": "What should the notification subject be?"
+    },
+    "message": {
+      "type": "string",
+      "question": "What message should be sent?"
+    },
+    "webhook_url": {
+      "type": "url",
+      "question": "What webhook URL should be used?"
+    },
+    "payload": {
+      "type": "object",
+      "question": "What payload should be sent?"
+    },
+    "notification_channel": {
+      "type": "string",
+      "question": "Which notification channel should I use? Example: email, webhook, discord, telegram"
+    },
+    "discord_webhook_url": {
+      "type": "url",
+      "question": "What Discord webhook URL should be used?"
+    },
+    "telegram_bot_token": {
+      "type": "string",
+      "question": "What Telegram bot token should be used?"
+    },
+    "telegram_chat_id": {
+      "type": "string",
+      "question": "What Telegram chat ID should receive the message?"
+    },
+    "nft_contract": {
+      "type": "evm_address",
+      "question": "What is the NFT contract address?"
+    },
+    "token_id": {
+      "type": "string",
+      "question": "What is the NFT token ID?"
+    },
+    "marketplace": {
+      "type": "string",
+      "question": "Which marketplace should I use?"
+    },
+    "listing_price": {
+      "type": "number",
+      "question": "What listing price should I use?"
+    },
+    "mint_contract_address": {
+      "type": "evm_address",
+      "question": "What is the NFT mint contract address?"
+    },
+    "mint_function_name": {
+      "type": "string",
+      "question": "What mint function should be called? Example: mint, publicMint, mintPublic"
+    },
+    "mint_quantity": {
+      "type": "number",
+      "question": "How many NFTs should be minted?"
+    },
+    "mint_price": {
+      "type": "number",
+      "question": "What mint price should be used?"
+    },
+    "mint_args": {
+      "type": "array",
+      "question": "What additional mint function arguments should be passed?"
+    },
+    "approval_spender": {
+      "type": "evm_address",
+      "question": "Which spender address should be approved?"
+    },
+    "approval_amount": {
+      "type": "number",
+      "question": "What approval amount should be set?"
+    },
+    "address": {
+      "type": "evm_address",
+      "question": "Which wallet address should I check?"
+    },
+    "rpc_url": {
+      "type": "url",
+      "question": "What is the RPC URL for this network? (e.g., https://eth.llamarpc.com)"
+    }
+  },
+  "actions": [
+    {
+      "type": "send_native_token",
+      "category": "wallet",
+      "python_handler": "action_send_native_token",
+      "description": "Send native chain token to a recipient.",
+      "required_fields": ["recipient_address", "amount"],
+      "integration_requirements": ["direct_contract_execution"]
+    },
+    {
+      "type": "send_erc20",
+      "category": "wallet",
+      "python_handler": "action_send_erc20",
+      "description": "Send ERC20 token to a recipient.",
+      "required_fields": ["token_address", "recipient_address", "amount"],
+      "integration_requirements": ["direct_contract_execution"]
+    },
+    {
+      "type": "batch_send_erc20",
+      "category": "wallet",
+      "python_handler": "action_batch_send_erc20",
+      "description": "Send ERC20 token to multiple recipients.",
+      "required_fields": ["token_address", "recipients"],
+      "integration_requirements": ["direct_contract_execution"]
+    },
+    {
+      "type": "approve_erc20",
+      "category": "wallet",
+      "python_handler": "action_approve_erc20",
+      "description": "Approve a spender for an ERC20 token.",
+      "required_fields": ["token_address", "approval_spender", "approval_amount"],
+      "integration_requirements": ["direct_contract_execution"]
+    },
+    {
+      "type": "swap_exact_in",
+      "category": "defi",
+      "python_handler": "action_swap_exact_in",
+      "description": "Swap a fixed input amount from token_in to token_out.",
+      "required_fields": ["dex_name", "dex_router", "token_in", "token_out", "amount_in", "slippage_bps"],
+      "integration_requirements": ["router_contract", "liquidity_route"]
+    },
+    {
+      "type": "swap_exact_out",
+      "category": "defi",
+      "python_handler": "action_swap_exact_out",
+      "description": "Swap enough input to receive an exact output amount.",
+      "required_fields": ["dex_name", "dex_router", "token_in", "token_out", "amount_out", "max_amount_in", "slippage_bps"],
+      "integration_requirements": ["router_contract", "liquidity_route"]
+    },
+    {
+      "type": "claim_faucet",
+      "category": "testnet",
+      "python_handler": "action_claim_faucet",
+      "description": "Claim tokens from a faucet.",
+      "required_fields": ["faucet_url", "claim_method", "platform_type"],
+      "optional_fields": ["api_url", "requires_api", "requires_browser", "requires_login", "requires_captcha"],
+      "integration_requirements": ["faucet_access"]
+    },
+    {
+      "type": "mint_nft",
+      "category": "nft",
+      "python_handler": "action_mint_nft",
+      "description": "Mint an NFT directly from a contract.",
+      "required_fields": ["mint_contract_address", "mint_function_name", "mint_quantity", "mint_price", "platform_type"],
+      "optional_fields": ["mint_args"],
+      "integration_requirements": ["mint_contract", "contract_abi_or_known_method"]
+    },
+    {
+      "type": "buy_nft_listing",
+      "category": "nft",
+      "python_handler": "action_buy_nft_listing",
+      "description": "Buy an NFT listing from a marketplace.",
+      "required_fields": ["marketplace", "platform_name", "nft_contract", "listing_price", "platform_type"],
+      "optional_fields": ["token_id"],
+      "integration_requirements": ["marketplace_integration", "listing_execution_path"]
+    },
+    {
+      "type": "transfer_nft",
+      "category": "nft",
+      "python_handler": "action_transfer_nft",
+      "description": "Transfer an NFT to another address.",
+      "required_fields": ["nft_contract", "token_id", "recipient_address"],
+      "integration_requirements": ["direct_contract_execution"]
+    },
+    {
+      "type": "list_nft",
+      "category": "nft",
+      "python_handler": "action_list_nft",
+      "description": "List an NFT on a marketplace.",
+      "required_fields": ["marketplace", "platform_name", "nft_contract", "token_id", "listing_price", "platform_type"],
+      "integration_requirements": ["marketplace_integration"]
+    },
+    {
+      "type": "send_email_notification",
+      "category": "notification",
+      "python_handler": "action_send_email_notification",
+      "description": "Send an email notification.",
+      "required_fields": ["to", "subject", "message"],
+      "integration_requirements": ["email_provider"]
+    },
+    {
+      "type": "send_webhook",
+      "category": "notification",
+      "python_handler": "action_send_webhook",
+      "description": "Send a webhook notification.",
+      "required_fields": ["webhook_url", "payload"],
+      "integration_requirements": ["webhook_access"]
+    },
+    {
+      "type": "send_discord_webhook",
+      "category": "notification",
+      "python_handler": "action_send_discord_webhook",
+      "description": "Send a Discord webhook notification.",
+      "required_fields": ["discord_webhook_url", "message"],
+      "integration_requirements": ["discord_webhook"]
+    },
+    {
+      "type": "send_telegram_message",
+      "category": "notification",
+      "python_handler": "action_send_telegram_message",
+      "description": "Send a Telegram message.",
+      "required_fields": ["telegram_bot_token", "telegram_chat_id", "message"],
+      "integration_requirements": ["telegram_bot"]
+    },
+    {
+      "type": "log_message",
+      "category": "system",
+      "python_handler": "action_log_message",
+      "description": "Log a message to runtime logs.",
+      "required_fields": ["message"],
+      "integration_requirements": []
+    },
+    {
+      "type": "get_balance",
+      "category": "wallet",
+      "python_handler": "action_get_balance",
+      "description": "Fetch the native token balance of a specific wallet address using a JSON-RPC node.",
+      "required_fields": ["address"],
+      "optional_fields": ["rpc_url"],
+      "integration_requirements": ["public_rpc_access"]
+    }
+  ]
+}

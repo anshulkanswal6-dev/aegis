@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+
+@theme {
+  --color-primary-50: #f9f9f9;
+  --color-primary-100: #f3f3f3;
+  --color-primary-200: #eeeeee;
+  --color-primary-300: #e8e8e8;
+  --color-primary-400: #e2e2e2;
+  --color-primary-500: #dadada;
+  --color-primary-600: #c6c6c6;
+  --color-primary-700: #777777;
+  --color-primary-800: #5e5e5e;
+  --color-primary-900: #474747;
+  --color-primary-950: #1a1c1c;
+
+  /* Digital Architect Core Palette */
+  --color-bg: #f9f9f9;
+  --color-surface: #ffffff;
+  --color-surface-low: #f3f3f3;
+  --color-surface-container: #eeeeee;
+  --color-outline: rgba(198, 198, 198, 0.15); /* Ghost Border */
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: #1a1c1c;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+  font-size: 14px;
+}
+
+/* Typography Scale */
+h1, h2, h3, h4, h5, h6 {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  color: #000000;
+}
+
+/* Base Layout Surfaces */
+.surface-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline);
+  border-radius: 4px;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+}
+
+.surface-inset {
+  background: var(--color-surface-low);
+  border: 1px solid var(--color-outline);
+  border-radius: 4px;
+}
+
+/* Interactive Elements */
+.btn-primary {
+  background: #000000;
+  color: #ffffff;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary:hover {
+  background: #1a1c1c;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: #1a1c1c;
+  border: 1px solid var(--color-primary-300);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-secondary:hover {
+  background: var(--color-surface-low);
+}
+
+/* Custom Scrollbar - Minimalish */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-primary-300);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-400);
+}
+
+/* Selection */
+::selection {
+  background: #000000;
+  color: #ffffff;
+}
+
+/* Glassmorphism for floating UI */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-outline);
+}
+
+/* IDE Specific Scrollbars */
+.custom-scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* VS Code Light Syntax Override (Simplified) */
+.prism-code .token.function { color: #795E26; }
+.prism-code .token.string { color: #A31515; }
+.prism-code .token.keyword { color: #0000FF; }
+.prism-code .token.comment { color: #008000; font-style: italic; }
+.prism-code .token.class-name { color: #267F99; }
+.prism-code .token.operator { color: #000000; }
+.prism-code .token.punctuation { color: #000000; }
+.prism-code .token.number { color: #098658; }
+

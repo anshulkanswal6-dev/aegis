@@ -94,7 +94,7 @@ export default function WalletPage() {
               </div>
               <div className="flex items-center gap-2">
                  <Database className="w-4 h-4 text-zinc-300" />
-                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Network: BSC Testnet</span>
+                 <span className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Network: Monad Testnet</span>
               </div>
            </div>
            <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-[0.3em]">AEGIS PLATFORM V1.0.4-BETA</span>

@@ -1,8 +1,5 @@
-import { bscTestnet } from 'wagmi/chains';
-
-export const SUPPORTED_CHAINS = [bscTestnet] as const;
-export const DEFAULT_CHAIN = bscTestnet;
+export const MONAD_TESTNET_ID = 10143;
 
 export const EXPLORER_URLS: Record<number, string> = {
-  [bscTestnet.id]: 'https://testnet.bscscan.com',
+  [MONAD_TESTNET_ID]: 'https://testnet.monadexplorer.com',
 };

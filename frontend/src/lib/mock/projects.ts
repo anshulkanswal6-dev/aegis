@@ -3,7 +3,7 @@ export interface Project {
   name: string;
   prompt: string;
   status: 'draft' | 'ready' | 'active' | 'error';
-  chain: 'BNB' | 'Monad' | 'Ethereum' | 'Base';
+  chain: 'MON' | 'Monad' | 'Ethereum' | 'Base' | 'BNB';
   lastUpdated: string;
   trigger: string;
   actions: string[];
@@ -17,10 +17,10 @@ export const MOCK_PROJECTS: Project[] = [
     name: 'Yield Optimizer Alpha',
     prompt: 'Check for high yield opportunities on DEXes daily and move funds if yield increases by 2%.',
     status: 'active',
-    chain: 'BNB',
+    chain: 'MON',
     lastUpdated: '2026-03-20T10:00:00Z',
     trigger: 'Daily Check (Every 24h)',
-    actions: ['Fetch PancakeSwap APR', 'Compare with current storage', 'Execute Swap'],
+    actions: ['Fetch Kuru APR', 'Compare with current storage', 'Execute Swap'],
     spec: `{
   "trigger": "cron:daily",
   "conditions": [
@@ -32,9 +32,9 @@ export const MOCK_PROJECTS: Project[] = [
 import agent from "@onchain-agent/sdk";
 
 export default async function run(ctx) {
-  const yields = await agent.dex.getYields("PancakeSwap");
+  const yields = await agent.dex.getYields("Kuru");
   if (yields.alpha > 0.05) {
-    await agent.wallet.swap("BNB", "USDT", ctx.balance);
+    await agent.wallet.swap("MON", "USDC", ctx.balance);
   }
 }`
   },

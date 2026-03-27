@@ -62,8 +62,28 @@ export default function PlaygroundPage() {
     activeAutomationId,
     deployAutomation,
     submitPrompt,
-    loadAutomation
+    loadAutomation,
+    setWalletAddress,
+    sessionId, pollTerminalLogs
   } = usePlaygroundStore();
+
+  // Sync wallet address with store
+  useEffect(() => {
+    if (address) {
+      setWalletAddress(address);
+    } else {
+      setWalletAddress(null);
+    }
+  }, [address, setWalletAddress]);
+
+  // Poll terminal logs
+  useEffect(() => {
+    if (!sessionId) return;
+    const interval = setInterval(() => {
+      pollTerminalLogs();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [sessionId, pollTerminalLogs]);
 
   // =========================================================
   // Handle Redeploy State
@@ -389,7 +409,7 @@ export default function PlaygroundPage() {
                <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF4D4D]">
                      <Network className="w-3.5 h-3.5" />
-                     BSC TESTNET
+                     MONAD TESTNET
                   </div>
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

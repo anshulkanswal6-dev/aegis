@@ -6,6 +6,7 @@ import pytz
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, List, Optional
+from web3 import Web3
 
 
 # =========================================================
@@ -74,6 +75,7 @@ class TriggerContext:
     wallet_address: Optional[str] = None
     now: Optional[datetime] = None
     memory: Optional[Dict[str, Any]] = None
+    automation_created_at: Optional[datetime] = None
 
     def get_now(self) -> datetime:
         return self.now or datetime.now(timezone.utc)
@@ -93,10 +95,22 @@ def fetch_token_price(asset: str, quote_currency: str, price_source: str) -> flo
     return mock_prices.get(asset.upper(), 100.0)
 
 
-def fetch_wallet_balance(wallet_address: str, token: str) -> float:
+def fetch_wallet_balance(wallet_address: str, token: str, rpc_url: Optional[str] = None) -> float:
+    # 1. Try real balance if RPC is available
+    if rpc_url and token.upper() in ["MON", "ETH", "BNB", "MATIC", "FTM", "NATIVE"]:
+        try:
+            w3 = Web3(Web3.HTTPProvider(rpc_url))
+            if w3.is_connected():
+                # Get balance in ether/native units
+                balance_wei = w3.eth.get_balance(Web3.to_checksum_address(wallet_address))
+                return float(Web3.from_wei(balance_wei, 'ether'))
+        except Exception as e:
+            print(f"[AEGIS] Error fetching real balance: {e}")
+
+    # 2. Fallback to mocks
     mock_balances = {
         "ETH": 0.12,
-        "TBNB": 0.05, # Added for BSC Testnet testing
+        "MON": 0.50, # Added for Monad Testnet testing
         "BNB": 0.05,
         "USDC": 550.0,
         "WETH": 0.03,
@@ -193,28 +207,88 @@ def trigger_run_once_at_datetime(params: Dict[str, Any], ctx: TriggerContext) ->
     else:
         resolved_date = params["date"]
 
+    # Parse time string (handle HH:MM or HH:MMam/pm or placeholders)
+    time_str = str(params["time"]).lower().strip()
+    
+    # Resolve relative placeholders like [[current_time_plus_2_minutes]]
+    # These resolve relative to the automation's creation time
+    placeholder_match = re.search(r"\[\[current_time_plus_(\d+)_minutes\]\]", time_str)
+    if placeholder_match:
+        minutes_offset = int(placeholder_match.group(1))
+        # Use created_at if available, otherwise fallback to 'now'
+        base_time = ctx.automation_created_at or now
+        target_dt = base_time + timedelta(minutes=minutes_offset)
+        
+        # Update resolved_date and time parts
+        resolved_date = target_dt.astimezone(tz).strftime("%Y-%m-%d")
+        time_str = target_dt.astimezone(tz).strftime("%H:%M")
+        time_match = re.match(r"^(\d{1,2}):(\d{2})$", time_str)
+    else:
+        time_match = re.match(r"^(\d{1,2}):(\d{2})\s*(am|pm)?$", time_str)
+        
+    if not time_match:
+        raise TriggerValidationError(f"Invalid time format: {time_str}. Expected HH:MM or HH:MMam/pm")
+    
+    groups = time_match.groups()
+    hh = groups[0]
+    mm = groups[1]
+    meridiem = groups[2] if len(groups) >= 3 else None
+    
+    hour = int(hh)
+    minute = int(mm)
+    
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+
     # Create target datetime in our timezone
     try:
-        target_naive = datetime.fromisoformat(f"{resolved_date}T{params['time']}:00")
+        target_naive = datetime(
+            year=int(resolved_date[:4]),
+            month=int(resolved_date[5:7]),
+            day=int(resolved_date[8:10]),
+            hour=hour,
+            minute=minute
+        )
         target = tz.localize(target_naive)
     except Exception as e:
-        raise TriggerValidationError(f"Invalid date/time format: {resolved_date} {params['time']}. Expected YYYY-MM-DD or 'today'.")
+        raise TriggerValidationError(f"Invalid date/time format: {resolved_date} {time_str}. {e}")
     
-    # Compare with current time (which is timezone-aware)
-    return now >= target
+    # Compare with current time in UTC
+    target_utc = target.astimezone(timezone.utc)
+    now_utc = now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    
+    is_triggered = now_utc >= target_utc
+    if is_triggered:
+        print(f"[TRIGGER-DEBUG] Schedule Matched! Target UTC: {target_utc}, Now UTC: {now_utc}")
+    return is_triggered
 
 
 def trigger_run_daily_at_time(params: Dict[str, Any], ctx: TriggerContext) -> bool:
     validate_required_fields(params, ["time", "timezone"])
     now = ctx.get_now()
     tz = _get_pytz_timezone(params["timezone"])
-    
-    # Convert 'now' to target timezone
     local_now = now.astimezone(tz)
     
-    target_time = params["time"]
-    hh, mm = map(int, target_time.split(":"))
-    return local_now.hour == hh and local_now.minute == mm
+    time_str = str(params["time"]).lower().strip()
+    time_match = re.match(r"^(\d{1,2}):(\d{2})\s*(am|pm)?$", time_str)
+    if not time_match:
+        return False 
+    
+    hh, mm, meridiem = time_match.groups()
+    hour = int(hh)
+    minute = int(mm)
+    
+    if meridiem == "pm" and hour < 12:
+        hour += 12
+    elif meridiem == "am" and hour == 12:
+        hour = 0
+
+    is_triggered = local_now.hour == hour and local_now.minute == minute
+    if is_triggered:
+        print(f"[TRIGGER-DEBUG] Daily Match! Local Time: {local_now}, Target Time: {hour:02d}:{minute:02d}")
+    return is_triggered
 
 
 def trigger_run_weekly_on_day_time(params: Dict[str, Any], ctx: TriggerContext) -> bool:
@@ -314,7 +388,7 @@ def trigger_wallet_balance_below(params: Dict[str, Any], ctx: TriggerContext) ->
     validate_required_fields(params, ["token", "threshold"])
     if not ctx.wallet_address:
         raise TriggerValidationError("wallet_address missing in context")
-    balance = fetch_wallet_balance(ctx.wallet_address, params["token"])
+    balance = fetch_wallet_balance(ctx.wallet_address, params["token"], rpc_url=ctx.rpc_url)
     threshold = parse_numeric(params["threshold"], "threshold")
     return balance < threshold
 
@@ -324,7 +398,7 @@ def trigger_wallet_balance_above(params: Dict[str, Any], ctx: TriggerContext) ->
     validate_required_fields(params, ["token", "threshold"])
     if not ctx.wallet_address:
         raise TriggerValidationError("wallet_address missing in context")
-    balance = fetch_wallet_balance(ctx.wallet_address, params["token"])
+    balance = fetch_wallet_balance(ctx.wallet_address, params["token"], rpc_url=ctx.rpc_url)
     threshold = parse_numeric(params["threshold"], "threshold")
     return balance > threshold
 

@@ -66,33 +66,44 @@ def execute_actions(
     if not isinstance(actions, list):
         actions = [actions]
 
+    def safe_log(event: str, message: str, details: Optional[Dict] = None):
+        if not log_fn:
+            return
+        try:
+            log_fn(event, message, details)
+        except Exception as le:
+            print(f"[AEGIS CRITICAL] Logging system failed: {le}")
+
     for i, action in enumerate(actions):
         action_type = action.get("type", "unknown") if isinstance(action, dict) else str(action)
         
         # Build action_params by merging global context with action-specific overrides
-        action_params = {**merged}
+        action_params = {merged_key: merged_val for merged_key, merged_val in merged.items()}
         if isinstance(action, dict) and action.get("params"):
             action_params.update(action["params"])
 
-        if log_fn:
-            log_fn("action_start", f"Executing action {i+1}/{len(actions)}: {action_type}", {"action_type": action_type})
+        safe_log("action_start", f"Executing action {i+1}/{len(actions)}: {action_type}", {"action_type": action_type})
 
         try:
             result = _action_engine.execute(action_type, action_params, ctx)
-            results.append({
-                "index": i,
-                "action_type": action_type,
-                "result": result,
-            })
+            success = result.get("success", False)
             
             # Map action type to natural language for the status stream
             msg = f"automation executed {action_type}"
-            if action_type == "send_token":
-                msg = f"automation sent payment to {action_params.get('to_address', 'recipient')}"
+            if action_type == "send_native_token":
+                if success:
+                    msg = f"automation sent payment to {action_params.get('recipient_address', 'recipient')}"
+                else:
+                    msg = f"payment failed: {result.get('error', 'unknown error')}"
+            elif action_type == "send_erc20":
+                if success:
+                    msg = f"automation sent ERC20 to {action_params.get('recipient_address', 'recipient')}"
+                else:
+                    msg = f"ERC20 transfer failed: {result.get('error', 'unknown error')}"
             elif action_type == "swap":
                 msg = f"automation swapped {action_params.get('from_token', 'token')} to {action_params.get('to_token', 'token')}"
             elif action_type == "send_email_notification":
-                if result.get("success"):
+                if success:
                     msg = "email sent"
                 elif result.get("error") == "cooldown_active":
                     msg = f"email skipped (cooldown: {result.get('remaining')}s)"
@@ -103,8 +114,27 @@ def execute_actions(
             elif action_type == "log_message":
                 msg = action_params.get('message', 'automation logged a message')
 
-            if log_fn:
-                log_fn("action_executed", msg, result)
+            if success:
+                safe_log("action_executed", msg, result)
+            else:
+                safe_log("action_failed", msg, result)
+
+            results.append({
+                "index": i,
+                "action_type": action_type,
+                "result": result,
+            })
+
+            if not success:
+                errors.append({
+                    "index": i,
+                    "action_type": action_type,
+                    "error": result.get("error", "Action returned success=False"),
+                })
+                # ABORT remaining actions (like notifications) if a critical action fails
+                safe_log("execution_aborted", "stopping automation cycle due to action failure", {"failed_index": i})
+                break
+
         except Exception as e:
             error_info = {
                 "index": i,
@@ -113,8 +143,8 @@ def execute_actions(
                 "traceback": traceback.format_exc(),
             }
             errors.append(error_info)
-            if log_fn:
-                log_fn("action_error", f"Action {action_type} failed: {str(e)}", error_info)
+            safe_log("action_error", f"Action {action_type} failed with exception: {str(e)}", error_info)
+            break
 
     overall_success = len(errors) == 0
     return {

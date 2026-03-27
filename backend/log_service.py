@@ -10,7 +10,7 @@ from __future__ import annotations
 import traceback
 from typing import Any, Dict, List, Optional
 
-from runtime_store import RunLogEntry, get_store
+from runtime_store import RunLogEntry, TerminalLogEntry, get_store
 
 
 def _write(automation_id: str, level: str, event: str, message: str, details: Optional[Dict[str, Any]] = None) -> RunLogEntry:
@@ -65,3 +65,32 @@ def clear_logs(automation_id: str) -> int:
     """Clear all logs for an automation. Returns count deleted."""
     store = get_store()
     return store.clear_logs(automation_id)
+
+
+# --- Terminal Logs ---
+
+def log_terminal(project_id: str, message: str, level: str = "info") -> TerminalLogEntry:
+    """Log terminal output for a session/project."""
+    entry = TerminalLogEntry(
+        project_id=project_id,
+        level=level,
+        message=message
+    )
+    store = get_store()
+    store.add_terminal_log(entry)
+    # Also print to console
+    # print(f"[TERMINAL] [{project_id[:8]}] {message}")
+    return entry
+
+
+def get_terminal_logs(project_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Retrieve recent terminal logs."""
+    store = get_store()
+    entries = store.get_terminal_logs(project_id, limit=limit)
+    return [e.to_dict() for e in entries]
+
+
+def clear_terminal_logs(project_id: str) -> int:
+    """Soft-clear terminal logs."""
+    store = get_store()
+    return store.clear_terminal_logs(project_id)

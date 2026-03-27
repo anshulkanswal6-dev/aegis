@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
+import log_service
 
 # Load env from current directory
 env_path = Path(__file__).parent / ".env"
@@ -45,8 +46,8 @@ class GenAIAgent:
         }
 
         self.models: Dict[str, Dict[str, str]] = {
-            "gemini_flash": {"provider": "gemini", "model_name": "models/gemini-2.5-flash", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 2.5 Flash"},
-            "gemini_pro": {"provider": "gemini", "model_name": "models/gemini-2.5-pro", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 2.5 Pro"},
+            "gemini_flash": {"provider": "gemini", "model_name": "models/gemini-flash-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 1.5 Flash"},
+            "gemini_pro": {"provider": "gemini", "model_name": "models/gemini-pro-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 1.5 Pro"},
             "claude_sonnet": {"provider": "claude", "model_name": "claude-3-5-sonnet-latest", "api_key_env": "ANTHROPIC_API_KEY", "label": "Claude Sonnet"},
         }
 
@@ -175,15 +176,17 @@ Return:
 
 ## IMPORTANT RULES:
 1. ALWAYS respond with valid JSON only. No markdown, no code fences, no extra text.
-2. For automation intents, be smart about mapping and TECHNICAL completeness. For example:
+2. **ZERO-PLACEHOLDER RULE**: NEVER invent values or use placeholders like `[[current_time_plus_2_minutes]]`, `[[HH:MM]]`, or `0x...` for missing fields. If a field is required in the catalogue and the user hasn't provided it, you MUST mark it as missing and ASK the user.
+3. For automation intents, be smart about mapping and TECHNICAL completeness. For example:
    - "swap ETH to USDC" → ask for the DEX name AND the router address.
    - "mint an NFT" → ask for the contract address AND the mint function signature.
-3. Extract as many field values as possible from the user's natural language.
-4. For missing fields, generate friendly but technically accurate questions.
-5. For "select" type fields with options, include the options array.
-6. When a user mentions a token like BNB, ETH, USDC — extract it as both "token" and "asset".
-7. Be conversational in your messages, but maintain a high degree of Web3 technical accuracy.
-8. NEVER pretend a protocol is "ready to go" if we need a contract address. Be honest about TODO fragments."""
+4. Extract as many field values as possible from the user's natural language.
+5. For missing fields, generate friendly but technically accurate questions.
+6. For "select" type fields with options, include the options array.
+7. When a user mentions a token like BNB, ETH, USDC — extract it as both "token" and "asset".
+8. Be conversational in your messages, but maintain a high degree of Web3 technical accuracy.
+9. NEVER pretend a protocol is "ready to go" if we need a contract address. Be honest about TODO fragments.
+10. **TIME & DATE PRECISION**: For time-based triggers, ALWAYS ask for the exact time (HH:MM) and date. Do NOT assume "now" or "in 2 minutes" unless the user explicitly says so."""
 
     def list_available_models(self) -> List[Dict[str, Union[str, bool]]]:
         return [{"id": mid, "label": str(cfg["label"]), "active": bool(os.getenv(str(cfg["api_key_env"])))} for mid, cfg in self.models.items()]
@@ -191,12 +194,13 @@ Return:
     # ==========================================================
     # MAIN CHAT ENTRY POINT
     # ==========================================================
-    def chat(self, user_message: str, session_id: Optional[str] = None, known_fields: Optional[Dict[str, Any]] = None, planning_model_id: str = "gemini_flash", codegen_model_id: str = "gemini_flash") -> Dict[str, Any]:
+    def chat(self, user_message: str, session_id: Optional[str] = None, wallet_address: Optional[str] = None, known_fields: Optional[Dict[str, Any]] = None, planning_model_id: str = "gemini_flash", codegen_model_id: str = "gemini_flash") -> Dict[str, Any]:
         if not session_id:
             session_id = str(uuid.uuid4())
         if session_id not in _sessions:
             _sessions[session_id] = {
                 "id": session_id, "stage": "idle",
+                "wallet_address": wallet_address,
                 "known_fields": known_fields or {},
                 "history": [], "selected_trigger": None,
                 "selected_actions": [], "plan_md": "", "files": {},
@@ -204,6 +208,8 @@ Return:
             }
 
         session = _sessions[session_id]
+        if wallet_address:
+            session["wallet_address"] = wallet_address
         session["history"].append({"role": "user", "content": user_message})
         session["codegen_model_id"] = codegen_model_id
         if known_fields:
@@ -253,9 +259,20 @@ Return:
                     "structured_questions": structured_questions,
                     "files": {}
                 }
+                log_service.log_terminal(session_id, f"❓ Missing fields: {', '.join(missing_fields)}. Asking user for input.")
+                return {
+                    "session_id": session_id,
+                    "stage": "needs_input",
+                    "status": "waiting_for_input",
+                    "agent_status": "asking",
+                    "agent_message": agent_message,
+                    "structured_questions": structured_questions,
+                    "files": {}
+                }
 
             # All fields present → generate plan
             session["stage"] = "awaiting_approval"
+            log_service.log_terminal(session_id, "📝 All fields collected. Generating plan.md...")
             plan_md = self._generate_plan_md(trigger_data, actions_data, session["known_fields"])
             session["plan_md"] = plan_md
             session["history"].append({"role": "assistant", "content": agent_message})
@@ -280,6 +297,7 @@ Return:
 
             if still_missing and structured_questions:
                 session["stage"] = "needs_input"
+                log_service.log_terminal(session_id, f"❓ Still missing fields: {', '.join(still_missing)}. Asking user for input.")
                 return {
                     "session_id": session_id,
                     "stage": "needs_input",
@@ -292,6 +310,7 @@ Return:
 
             # All fields present → generate plan
             session["stage"] = "awaiting_approval"
+            log_service.log_terminal(session_id, "📝 All fields collected. Generating plan.md...")
             plan_md = self._generate_plan_md(
                 session.get("selected_trigger", {}),
                 session.get("selected_actions", []),
@@ -315,8 +334,15 @@ Return:
     # ==========================================================
     # CONTINUE CHAT (follow-up field submissions)
     # ==========================================================
-    def continue_chat(self, session_id: str, fields: Dict[str, Any], planning_model_id: str = "gemini_flash") -> Dict[str, Any]:
+    def continue_chat(self, session_id: str, fields: Dict[str, Any], wallet_address: Optional[str] = None, planning_model_id: str = "gemini_flash") -> Dict[str, Any]:
+        if session_id not in _sessions:
+            # Session lost after restart - gracefully transition back to a new chat
+            log_service.log_terminal(session_id, "⚠️ Session not found. Restarting chat with provided fields.")
+            return self.chat("I'm back! Let's resume where we left off.", session_id, wallet_address=wallet_address, known_fields=fields, planning_model_id=planning_model_id)
+
         session = _sessions[session_id]
+        if wallet_address:
+            session["wallet_address"] = wallet_address
         session["known_fields"].update(fields)
 
         # Build a natural message from the submitted fields
@@ -324,12 +350,15 @@ Return:
         user_msg = f"Here are the values: {fields_text}"
         session["history"].append({"role": "user", "content": user_msg})
 
+        log_service.log_terminal(session_id, f"Received follow-up fields: {fields_text}")
+
         # Let Gemini decide if more fields are needed
         try:
             ai_response = self._ask_gemini(session["history"], planning_model_id)
         except Exception as e:
             print(f"[AEGIS Continue Error] {str(e)}")
             # Try to proceed with what we have
+            log_service.log_terminal(session_id, "⚠️ AI error during field update. Attempting to finalize plan with available data.")
             return self._try_finalize_plan(session_id, session)
 
         intent = ai_response.get("intent", "field_update")
@@ -344,6 +373,7 @@ Return:
 
         if still_missing and structured_questions:
             session["stage"] = "needs_input"
+            log_service.log_terminal(session_id, f"❓ Still missing fields: {', '.join(still_missing)}. Asking user for input.")
             return {
                 "session_id": session_id,
                 "stage": "needs_input",
@@ -355,6 +385,7 @@ Return:
             }
 
         # All fields → generate plan
+        log_service.log_terminal(session_id, "📝 All fields collected. Generating plan.md...")
         return self._try_finalize_plan(session_id, session, agent_message)
 
     # ==========================================================
@@ -364,8 +395,11 @@ Return:
         session = _sessions[session_id]
         if not approved:
             session["stage"] = "idle"
+            log_service.log_terminal(session_id, "❌ Plan rejected by user. Resetting session.")
             return self._response(session_id, "idle", "chat", "reset",
                 "No worries! I've scrapped that plan. What should we build instead? 🔄")
+
+        log_service.log_terminal(session_id, "👍 Plan approved! Starting code generation...")
 
         # Approved → have Gemini generate the actual Python automation code
         spec = self._build_spec(session["selected_trigger"], session["selected_actions"], session["known_fields"])
@@ -375,10 +409,12 @@ Return:
             files = self._generate_code_with_gemini(spec, session["known_fields"], codegen_model)
         except Exception as e:
             print(f"[AEGIS Code Gen Error] {str(e)}")
+            log_service.log_terminal(session_id, "❌ Code generation failed. Falling back to template-based generation.")
             # Fallback to template-based generation
             files = self._generate_workspace_files_fallback(spec)
 
         session.update({"stage": "complete", "files": files})
+        log_service.log_terminal(session_id, "✅ Code generation complete!")
         return {
             "session_id": session_id,
             "stage": "complete",
@@ -455,7 +491,7 @@ Generate these files and return them as a JSON object (filename: content):
         3. "config.json" (Runtime Configuration):
     - A runtime-ready JSON structure using nested objects for clarity.
     - Project Name: "{fields.get('name', 'Automation Project')}"
-    - CHAIN & RPC: If 'tbnb' or 'bsc' is mentioned, YOU MUST set chain.name to "BSC Testnet" and chain.rpc to "https://data-seed-prebsc-1-s1.bnbchain.org:8545".
+    - CHAIN & RPC: If 'mon' or 'monad' is mentioned, YOU MUST set chain.name to "Monad Testnet" and chain.rpc to "https://testnet-rpc.monad.xyz".
     - ACTIONS: Include ALL requested actions: {json.dumps(action_types)}.
     - MUST CLEAN ACTION PARAMS: Only include fields relevant to each specific action. For 'send_native_token', ONLY include 'recipient_address' and 'amount'. For 'send_email_notification', ONLY include 'to', 'subject', and 'message'. Do NOT put trigger-only fields like 'date' or 'timezone' into action params.
     - DATES: Use the extracted 'date' and 'time' for the trigger. If 'date' is 'today', keep it as 'today' (the engine now resolves this).
@@ -463,7 +499,7 @@ Generate these files and return them as a JSON object (filename: content):
       {{
         "name": "{fields.get('name', 'Automation Project')}",
         "spec_id": "{spec['id']}",
-        "chain": {{ "name": "BSC Testnet", "rpc": "https://data-seed-prebsc-1-s1.bnbchain.org:8545" }},
+        "chain": {{ "name": "Monad Testnet", "rpc": "https://testnet-rpc.monad.xyz" }},
         "wallet": {{ "address": "{fields.get('wallet_address', '')}" }},
         "trigger": {{ "type": "{trigger_type}", "params": {{ "date": "today", "time": "22:30", "timezone": "IST" }} }},
         "actions": [
@@ -494,7 +530,7 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
             files = self._extract_json(raw_text)
             if files and isinstance(files, dict):
                 # Programmatic Normalization: 
-                # If chain is unknown but tbnb/bsc is mentioned, force BSC Testnet.
+                # If chain is unknown but mon/monad is mentioned, force Monad Testnet.
                 config_json = files.get("config.json")
                 if isinstance(config_json, str):
                     try:
@@ -504,18 +540,18 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
                         token = str(params.get("token", "")).lower()
                         asset = str(params.get("asset", "")).lower()
                         
-                        # Broad Normalization: Force BSC if mentioned OR if name is unknown OR if rpc is empty
-                        needs_bsc = (
-                            token in ["tbnb", "bnb", "bsc"] or 
-                            asset in ["tbnb", "bnb", "bsc"] or
+                        # Broad Normalization: Force Monad if mentioned OR if name is unknown OR if rpc is empty
+                        needs_monad = (
+                            token in ["mon", "monad"] or 
+                            asset in ["mon", "monad"] or
                             chain_info.get("name") == "unknown" or
                             not chain_info.get("rpc")
                         )
                         
-                        if needs_bsc:
+                        if needs_monad:
                             config_data["chain"] = {
-                                "name": "BSC Testnet",
-                                "rpc": "https://data-seed-prebsc-1-s1.bnbchain.org:8545"
+                                "name": "Monad Testnet",
+                                "rpc": "https://testnet-rpc.monad.xyz"
                             }
                             files["config.json"] = json.dumps(config_data, indent=2)
                     except Exception:
@@ -707,6 +743,20 @@ if __name__ == "__main__":
     main()
 '''.replace("{spec_id}", spec_id)
 
+        # Clean parameters for trigger and actions
+        all_params = spec["params"]
+        
+        # Trigger specific params
+        trigger_params = {}
+        if trigger_type in ["run_once_at_datetime", "run_daily_at_time", "run_between_time_window", "run_weekly_on_day_time", "run_monthly_on_date_time"]:
+            trigger_params = {k: all_params[k] for k in ["date", "time", "timezone", "weekday", "day_of_month", "start_time", "end_time"] if k in all_params}
+        elif trigger_type in ["wallet_balance_below", "wallet_balance_above"]:
+            trigger_params = {k: all_params[k] for k in ["token", "asset", "threshold"] if k in all_params}
+        elif trigger_type in ["token_price_below", "token_price_above"]:
+             trigger_params = {k: all_params[k] for k in ["asset", "token", "quote_currency", "threshold", "price_source"] if k in all_params}
+        else:
+            trigger_params = all_params.copy()
+
         # Structured configuration matching the prompt requirement
         config_data = {
             "spec_id": spec_id,
@@ -719,12 +769,12 @@ if __name__ == "__main__":
             },
             "trigger": {
                 "type": trigger_type,
-                "params": spec["params"]
+                "params": trigger_params
             },
             "actions": [
                 {
                     "type": atype,
-                    "params": spec["params"],
+                    "params": {k: all_params[k] for k in ["recipient_address", "amount", "to", "subject", "message", "token", "asset"] if k in all_params},
                     "integration": {
                         "// TODO": "Replace with router_address, nft_contract, or faucet_url for this action"
                     }
@@ -760,7 +810,7 @@ The generated code provided the orchestration logic, but protocol-specific detai
             "config.json": json.dumps(config_data, indent=2),
             "requirements.txt": "web3\nrequests\npython-dotenv\nschedule",
             "README.md": readme,
-            ".env.example": "# AEGIS Node Secrets\n# IMPORTANT: This is for the EXECUTOR NODE, NEVER enter your main wallet seed/key here!\nEXECUTOR_PRIVATE_KEY=\nRPC_URL=\nWALLET_ADDRESS=\n"
+            ".env.example": "# AEGIS Node Secrets\n# IMPORTANT: Use the PLATFORM_EXECUTOR_ADDRESS for secure execution.\n# This local .env is for advanced users running their own node infrastructure.\nRPC_URL=https://testnet-rpc.monad.xyz\nWALLET_ADDRESS=\n"
         }
 
     # ==========================================================

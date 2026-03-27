@@ -13,7 +13,6 @@ contract AgentWallet {
     error NotExecutor();
     error Paused();
     error ZeroAddress();
-    error TargetNotAllowed();
     error InsufficientEthBalance();
     error DailyEthLimitExceeded();
     error DailyTokenLimitExceeded();
@@ -25,8 +24,6 @@ contract AgentWallet {
 
     bool public initialized;
     bool public walletPaused;
-
-    mapping(address => bool) public allowedTargets;
 
     uint256 public dailyEthLimit;
     uint256 public ethSpentToday;
@@ -44,8 +41,6 @@ contract AgentWallet {
     event ExecutorUpdated(address indexed oldExecutor, address indexed newExecutor);
     event WalletPaused();
     event WalletUnpaused();
-
-    event AllowedTargetSet(address indexed target, bool allowed);
     event DailyEthLimitUpdated(uint256 oldLimit, uint256 newLimit);
     event DailyTokenLimitUpdated(address indexed token, uint256 oldLimit, uint256 newLimit);
 
@@ -120,23 +115,6 @@ contract AgentWallet {
         emit WalletUnpaused();
     }
 
-    function setAllowedTarget(address target, bool allowed) external onlyOwner {
-        if (target == address(0)) revert ZeroAddress();
-        allowedTargets[target] = allowed;
-        emit AllowedTargetSet(target, allowed);
-    }
-
-    function setAllowedTargets(address[] calldata targets, bool allowed) external onlyOwner {
-        uint256 len = targets.length;
-        for (uint256 i = 0; i < len; ) {
-            if (targets[i] == address(0)) revert ZeroAddress();
-            allowedTargets[targets[i]] = allowed;
-            emit AllowedTargetSet(targets[i], allowed);
-            unchecked {
-                ++i;
-            }
-        }
-    }
 
     function updateDailyEthLimit(uint256 newLimit) external onlyOwner {
         uint256 old = dailyEthLimit;
@@ -194,7 +172,6 @@ contract AgentWallet {
         bytes calldata data
     ) external onlyExecutor whenNotPaused returns (bytes memory result) {
         if (target == address(0)) revert ZeroAddress();
-        if (!allowedTargets[target]) revert TargetNotAllowed();
         if (address(this).balance < amount) revert InsufficientEthBalance();
 
         _resetEthSpendIfNeeded();
@@ -215,7 +192,6 @@ contract AgentWallet {
         uint256 amount
     ) external onlyExecutor whenNotPaused {
         if (token == address(0) || to == address(0)) revert ZeroAddress();
-        if (!allowedTargets[to]) revert TargetNotAllowed();
 
         _resetTokenSpendIfNeeded(token);
         if (tokenSpentToday[token] + amount > dailyTokenLimit[token]) {
@@ -234,7 +210,6 @@ contract AgentWallet {
         bytes calldata data
     ) external onlyExecutor whenNotPaused returns (bytes memory result) {
         if (target == address(0)) revert ZeroAddress();
-        if (!allowedTargets[target]) revert TargetNotAllowed();
 
         if (ethValue > 0) {
             if (address(this).balance < ethValue) revert InsufficientEthBalance();
@@ -256,7 +231,6 @@ contract AgentWallet {
         uint256 amount
     ) external onlyOwner {
         if (token == address(0) || spender == address(0)) revert ZeroAddress();
-        if (!allowedTargets[spender]) revert TargetNotAllowed();
         IERC20(token).approve(spender, amount);
     }
 

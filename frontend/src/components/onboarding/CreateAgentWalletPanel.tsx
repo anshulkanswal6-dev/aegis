@@ -3,16 +3,18 @@ import { useAgentWallet } from '../../hooks/useAgentWallet';
 import { Bot, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
 import { Button } from '../ui/UIPack';
 import { useState, useEffect } from 'react';
+import { PLATFORM_EXECUTOR_ADDRESS } from '../../lib/config/contracts';
 
 export function CreateAgentWalletPanel() {
   const { isConnected, address } = useAccount();
   const { createWallet, isCreating } = useAgentWallet();
-  const [executor, setExecutor] = useState('');
+  const [executor, setExecutor] = useState(PLATFORM_EXECUTOR_ADDRESS);
   const [limit, setLimit] = useState('0.1');
 
   useEffect(() => {
-    if (address && !executor) setExecutor(address);
-  }, [address, executor]);
+    // Keep it always set to the platform executor as per contract requirements
+    setExecutor(PLATFORM_EXECUTOR_ADDRESS);
+  }, []);
 
   const handleCreate = () => {
     if (!address || !executor || !limit) return;
@@ -35,18 +37,17 @@ export function CreateAgentWalletPanel() {
 
       <div className="space-y-6">
          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider ml-1">Executor Signature</label>
+            <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider ml-1">Platform Authorized Executor (Linked)</label>
             <input 
               type="text" 
               value={executor}
-              onChange={(e) => setExecutor(e.target.value)}
-              placeholder="0x..."
-              className="w-full h-12 bg-zinc-50 border border-[#eeeeee] rounded-xl px-5 text-sm text-black font-bold placeholder:text-zinc-300 outline-none focus:bg-white focus:border-black transition-all font-mono shadow-inner"
+              readOnly
+              className="w-full h-12 bg-zinc-50 border border-[#eeeeee] rounded-xl px-5 text-sm text-zinc-400 font-bold outline-none font-mono shadow-inner cursor-not-allowed"
             />
          </div>
 
          <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider ml-1">Daily Resource Quota (BNB)</label>
+            <label className="text-[10px] font-bold uppercase text-zinc-400 tracking-wider ml-1">Daily Resource Quota (MON)</label>
             <div className="relative group/input">
               <input 
                 type="number" 
@@ -56,7 +57,7 @@ export function CreateAgentWalletPanel() {
                 placeholder="0.1"
                 className="w-full h-12 bg-zinc-50 border border-[#eeeeee] rounded-xl px-5 text-sm text-black font-bold placeholder:text-zinc-300 outline-none focus:bg-white focus:border-black transition-all font-mono shadow-inner"
               />
-              <div className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-300 tracking-widest pointer-events-none group-focus-within/input:text-black transition-colors">BNB/DAY</div>
+              <div className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-300 tracking-widest pointer-events-none group-focus-within/input:text-black transition-colors">MON/DAY</div>
             </div>
          </div>
       </div>
@@ -85,4 +86,3 @@ export function CreateAgentWalletPanel() {
     </div>
   );
 }
-

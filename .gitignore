@@ -39,6 +39,10 @@ yarn-error.log*
 # AEGIS Specific
 backend/.runtime_data/
 backend/addr.txt
+backend/compilation_error.txt
+backend/models_out.txt
+backend/test_out.txt
+backend/available_models.txt
 
 # OS
 .DS_Store
@@ -48,6 +52,13 @@ desktop.ini
 # IDEs
 .vscode/
 .idea/
+
+# Temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*~
 *.swp
 *.swo
 .project

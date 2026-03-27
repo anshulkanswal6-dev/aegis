@@ -33,6 +33,7 @@ class DeployRequest(BaseModel):
     name: str
     description: str = ""
     session_id: str = ""
+    wallet_address: Optional[str] = None # Added for Supabase identity
     spec_json: Dict[str, Any]
     files: Dict[str, str] = Field(default_factory=dict)
 
@@ -73,23 +74,23 @@ def _normalize_spec_json(spec: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(spec.get("trigger"), dict):
         trigger_params = spec["trigger"].get("params", {})
     
-    # Detect BSC Testnet from token/asset mentions
+    # Detect Monad Testnet from token/asset mentions
     token = str(trigger_params.get("token", "")).lower()
     asset = str(trigger_params.get("asset", "")).lower()
     chain_name = str(chain_info.get("name", "")).lower()
     rpc = str(chain_info.get("rpc", ""))
     
-    needs_bsc = (
-        token in ["tbnb", "bnb", "bsc"] or
-        asset in ["tbnb", "bnb", "bsc"] or
+    needs_monad = (
+        token in ["mon", "monad"] or
+        asset in ["mon", "monad"] or
         chain_name == "unknown" or
         not rpc
     )
     
-    if needs_bsc:
+    if needs_monad:
         spec["chain"] = {
-            "name": "BSC Testnet",
-            "rpc": "https://data-seed-prebsc-1-s1.bnbchain.org:8545"
+            "name": "Monad Testnet",
+            "rpc": "https://testnet-rpc.monad.xyz"
         }
     
     # Clean action params: only keep relevant fields per action type
@@ -130,6 +131,7 @@ async def deploy_automation(req: DeployRequest):
             name=req.name,
             spec_json=normalized_spec,
             session_id=req.session_id,
+            wallet_address=req.wallet_address,
             description=req.description,
             files=req.files,
         )
@@ -266,3 +268,19 @@ async def get_executor_address():
         return {"address": acc.address}
     except Exception as e:
         return {"address": None, "error": str(e)}
+
+
+# --- Terminal Logs ---
+
+@router.get("/terminal/{session_id}/logs")
+async def get_terminal_logs(session_id: str, limit: int = 100):
+    """Get terminal logs for a project session."""
+    logs = log_service.get_terminal_logs(session_id, limit=limit)
+    return {"session_id": session_id, "logs": logs, "total": len(logs)}
+
+
+@router.post("/terminal/{session_id}/clear")
+async def clear_terminal_logs(session_id: str):
+    """Clear terminal logs for a session."""
+    count = log_service.clear_terminal_logs(session_id)
+    return {"success": True, "count": count}

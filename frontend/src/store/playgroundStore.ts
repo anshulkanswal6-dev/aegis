@@ -45,6 +45,7 @@ export interface PlaygroundState {
   messages: ChatMessage[];
   status: PlaygroundStatus;
   sessionId: string | null;
+  walletAddress: string | null;
   
   // Model Config
   planningModel: string;
@@ -90,7 +91,9 @@ export interface PlaygroundState {
   addTerminalLog: (log: string) => void;
   addAutomationLog: (log: string) => void;
   setModels: (planning: string, codegen: string) => void;
+  setWalletAddress: (address: string | null) => void;
   fetchModels: () => Promise<void>;
+  pollTerminalLogs: () => Promise<void>;
   addMessage: (m: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
   addAgentStatus: (status: string, icon: string, content: string) => void;
   submitPrompt: (prompt: string) => Promise<void>;
@@ -108,6 +111,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   messages: [],
   status: 'idle',
   sessionId: null,
+  walletAddress: null,
   activeView: 'compile',
   activeBottomTab: 'compile',
   
@@ -270,6 +274,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
   })),
   
   setModels: (planning, codegen) => set({ planningModel: planning, codegenModel: codegen }),
+  setWalletAddress: (address) => set({ walletAddress: address }),
 
   fetchModels: async () => {
     try {
@@ -286,6 +291,19 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     }
   },
 
+  pollTerminalLogs: async () => {
+    const state = get();
+    if (!state.sessionId) return;
+    try {
+      const data = await agentService.getTerminalLogs(state.sessionId);
+      if (data && data.logs) {
+        set({ terminalLogs: data.logs.map((l: any) => l.message) });
+      }
+    } catch (e) {
+      console.error("Terminal log poll failed", e);
+    }
+  },
+
   deployAutomation: async () => {
     const state = get();
     if (!state.sessionId) return;
@@ -298,6 +316,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       const result = await agentService.deploy(
         name,
         specObj,
+        state.walletAddress || undefined,
         state.sessionId,
         state.reasoning,
         state.customFiles
@@ -326,6 +345,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
      structuredQuestions: [],
      status: 'idle',
      sessionId: null,
+     walletAddress: null,
      activeAutomationId: null,
      customFiles: {},
      openFiles: [],
@@ -363,6 +383,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
     set({
       status: 'success',
       sessionId: automation.session_id,
+      walletAddress: automation.wallet_address || null,
       intentSummary: automation.name,
       reasoning: automation.description,
       spec: specString,
@@ -429,6 +450,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       const data = await agentService.chat(
         prompt,
         state.sessionId || undefined,
+        state.walletAddress || undefined,
         mergedFields,
         state.planningModel,
         state.codegenModel
@@ -552,6 +574,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
       const data = await agentService.continueChat(
         state.sessionId,
         mergedFields,
+        state.walletAddress || undefined,
         state.planningModel
       );
 

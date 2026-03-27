@@ -1,12 +1,14 @@
 import { ConnectWalletCard } from '../components/wallet/ConnectWalletCard';
 import { CreateAgentWalletPanel } from '../components/onboarding/CreateAgentWalletPanel';
 import { FundAgentWalletPanel } from '../components/onboarding/FundAgentWalletPanel';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { useAgentWallet } from '../hooks/useAgentWallet';
 import { ShieldCheck, ArrowRight, LayoutDashboard, Terminal, Search, Sparkles, Clock, CheckCircle2, PlayCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/UIPack';
 import { cn } from '../lib/utils/cn';
+import { MONAD_TESTNET_ID } from '../lib/config/chains';
+
 
 const RECENT_TASKS = [
   { id: '#7821', name: 'Daily Treasury Swap', modified: '2 mins ago', status: 'Running', chain: 'Ethereum' },
@@ -15,11 +17,13 @@ const RECENT_TASKS = [
 ];
 
 export default function LandingPage() {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
+  const chainId = useChainId();
   const { agentWalletAddress, ethBalance } = useAgentWallet();
   const navigate = useNavigate();
 
-  const currentStep = !isConnected ? 1 : !agentWalletAddress ? 2 : ethBalance === 0n ? 3 : 4;
+  const isCorrectChain = chainId === MONAD_TESTNET_ID;
+  const currentStep = (!isConnected || !address || !isCorrectChain) ? 1 : !agentWalletAddress ? 2 : ethBalance === 0n ? 3 : 4;
 
   const steps = [
     { number: 1, title: 'Connect Wallet', description: 'Authorize your node session.' },

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { useAccount, useReadContract, useWriteContract, useChainId, usePublicClient } from 'wagmi';
-import { parseEther } from 'viem';
+import { useAccount, useReadContract, useWriteContract, useChainId, usePublicClient, useSwitchChain } from 'wagmi';
+import { parseEther, getAddress } from 'viem';
 import type { Address } from 'viem';
 import { AgentWalletFactoryABI } from '../lib/abi/AgentWalletFactory';
 import { AgentWalletABI } from '../lib/abi/AgentWallet';
@@ -11,6 +11,8 @@ import { getExplorerUrl } from '../lib/utils/explorer';
 import { formatEth } from '../lib/utils/format';
 import { cleanWeb3Error } from '../lib/utils/errors';
 import { useToast } from './useToast';
+import { MONAD_TESTNET_ID } from '../lib/config/chains';
+
 
 export function useAgentWallet() {
   const { toast } = useToast();
@@ -28,6 +30,8 @@ export function useAgentWallet() {
   } = useAgentWalletStore();
 
   const { writeContractAsync } = useWriteContract();
+  const { switchChainAsync } = useSwitchChain();
+
 
   // Read current agent wallet for the user
   const { data: currentWallet, refetch: refetchWallet } = useReadContract({
@@ -71,11 +75,16 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: 'Initiating Agent Wallet creation...' });
 
     try {
+      if (chainId !== MONAD_TESTNET_ID) {
+        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
+        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      }
+
       const hash = await writeContractAsync({
-        address: CONTRACT_CONFIG.factory.address,
+        address: getAddress(CONTRACT_CONFIG.factory.address),
         abi: AgentWalletFactoryABI,
         functionName: 'createWallet',
-        args: [executor as Address, parseEther(limit)],
+        args: [getAddress(executor) as Address, parseEther(limit)],
       });
 
       addLog({ 
@@ -108,6 +117,11 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: `Depositing ${amountEth} ${chainSymbol} to Agent Wallet...` });
 
     try {
+      if (chainId !== MONAD_TESTNET_ID) {
+        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
+        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      }
+
       const hash = await writeContractAsync({
         address: agentWalletAddress,
         abi: AgentWalletABI,
@@ -145,6 +159,11 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: `Withdrawing ${amountEth} ${chainSymbol} from Agent Wallet...` });
 
     try {
+      if (chainId !== MONAD_TESTNET_ID) {
+        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
+        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      }
+
       const hash = await writeContractAsync({
         address: agentWalletAddress,
         abi: AgentWalletABI,

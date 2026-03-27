@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from config import STORE_JSON_PATH, LOGS_JSON_PATH, MAX_LOGS_PER_AUTOMATION, RUNTIME_DATA_DIR
+from config import STORE_JSON_PATH, LOGS_JSON_PATH, TERMINAL_LOGS_JSON_PATH, MAX_LOGS_PER_AUTOMATION, RUNTIME_DATA_DIR
 
 
 # =========================================================
@@ -42,6 +42,7 @@ class AutomationRecord:
     name: str
     description: str = ""
     session_id: str = ""
+    wallet_address: str = "" # Added for Supabase identity
     # The structured spec produced by the agent (trigger + actions + params)
     spec_json: Dict[str, Any] = field(default_factory=dict)
     # status model: draft | planning | approved | ready_for_deploy | active | paused | failed
@@ -83,6 +84,24 @@ class RunLogEntry:
         return RunLogEntry(**{k: v for k, v in d.items() if k in RunLogEntry.__dataclass_fields__})
 
 
+@dataclass
+class TerminalLogEntry:
+    """A log entry that represents terminal output for a project/session."""
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str = "" # maps to session_id for now
+    timestamp: str = field(default_factory=_utcnow_iso)
+    level: str = "info"
+    message: str = ""
+    cleared_at: Optional[str] = None # For soft-delete/clear
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(d: Dict[str, Any]) -> "TerminalLogEntry":
+        return TerminalLogEntry(**{k: v for k, v in d.items() if k in TerminalLogEntry.__dataclass_fields__})
+
+
 # =========================================================
 # Abstract Base
 # =========================================================
@@ -116,6 +135,16 @@ class RuntimeStoreBase(ABC):
     @abstractmethod
     def clear_logs(self, automation_id: str) -> int: ...
 
+    # --- Terminal Logs ---
+    @abstractmethod
+    def add_terminal_log(self, entry: TerminalLogEntry) -> TerminalLogEntry: ...
+
+    @abstractmethod
+    def get_terminal_logs(self, project_id: str, limit: int = 100) -> List[TerminalLogEntry]: ...
+
+    @abstractmethod
+    def clear_terminal_logs(self, project_id: str) -> int: ...
+
 
 # =========================================================
 # In-Memory Store
@@ -128,6 +157,7 @@ class InMemoryStore(RuntimeStoreBase):
         self._lock = threading.Lock()
         self._automations: Dict[str, Dict[str, Any]] = {}
         self._logs: Dict[str, List[Dict[str, Any]]] = {}
+        self._terminal_logs: Dict[str, List[Dict[str, Any]]] = {}
 
     def save_automation(self, record: AutomationRecord) -> AutomationRecord:
         with self._lock:
@@ -182,6 +212,31 @@ class InMemoryStore(RuntimeStoreBase):
             self._logs.pop(automation_id, None)
             return count
 
+    def add_terminal_log(self, entry: TerminalLogEntry) -> TerminalLogEntry:
+        with self._lock:
+            bucket = self._terminal_logs.setdefault(entry.project_id, [])
+            bucket.append(entry.to_dict())
+            if len(bucket) > 500: # Slightly larger buffer for terminal
+                self._terminal_logs[entry.project_id] = bucket[-500:]
+            return entry
+
+    def get_terminal_logs(self, project_id: str, limit: int = 100) -> List[TerminalLogEntry]:
+        with self._lock:
+            bucket = self._terminal_logs.get(project_id, [])
+            # Filter out "cleared" logs (soft delete)
+            return [TerminalLogEntry.from_dict(d) for d in bucket if not d.get("cleared_at")][-limit:]
+
+    def clear_terminal_logs(self, project_id: str) -> int:
+        with self._lock:
+            bucket = self._terminal_logs.get(project_id, [])
+            count = 0
+            now = _utcnow_iso()
+            for d in bucket:
+                if not d.get("cleared_at"):
+                    d["cleared_at"] = now
+                    count += 1
+            return count
+
 
 # =========================================================
 # JSON File Store
@@ -190,16 +245,19 @@ class InMemoryStore(RuntimeStoreBase):
 class JsonFileStore(RuntimeStoreBase):
     """Persists to local JSON files. Survives restarts."""
 
-    def __init__(self, automations_path: Path = STORE_JSON_PATH, logs_path: Path = LOGS_JSON_PATH):
+    def __init__(self, automations_path: Path = STORE_JSON_PATH, logs_path: Path = LOGS_JSON_PATH, terminal_logs_path: Path = TERMINAL_LOGS_JSON_PATH):
         self._lock = threading.Lock()
         self._auto_path = automations_path
         self._logs_path = logs_path
+        self._terminal_logs_path = terminal_logs_path
         # Ensure directory exists
         self._auto_path.parent.mkdir(parents=True, exist_ok=True)
         self._logs_path.parent.mkdir(parents=True, exist_ok=True)
+        self._terminal_logs_path.parent.mkdir(parents=True, exist_ok=True)
         # Load existing data
         self._automations = self._load_json(self._auto_path)
         self._logs = self._load_json(self._logs_path)
+        self._terminal_logs = self._load_json(self._terminal_logs_path)
 
     def _reload(self):
         """Reload data from disk if it exists."""
@@ -229,6 +287,10 @@ class JsonFileStore(RuntimeStoreBase):
     def _flush_logs(self):
         with open(self._logs_path, "w", encoding="utf-8") as f:
             json.dump(self._logs, f, indent=2, default=str)
+
+    def _flush_terminal_logs(self):
+        with open(self._terminal_logs_path, "w", encoding="utf-8") as f:
+            json.dump(self._terminal_logs, f, indent=2, default=str)
 
     def save_automation(self, record: AutomationRecord) -> AutomationRecord:
         with self._lock:
@@ -296,6 +358,35 @@ class JsonFileStore(RuntimeStoreBase):
             self._flush_logs()
             return count
 
+    def add_terminal_log(self, entry: TerminalLogEntry) -> TerminalLogEntry:
+        with self._lock:
+            self._reload()
+            bucket = self._terminal_logs.setdefault(entry.project_id, [])
+            bucket.append(entry.to_dict())
+            if len(bucket) > 500:
+                self._terminal_logs[entry.project_id] = bucket[-500:]
+            self._flush_terminal_logs()
+            return entry
+
+    def get_terminal_logs(self, project_id: str, limit: int = 100) -> List[TerminalLogEntry]:
+        with self._lock:
+            self._reload()
+            bucket = self._terminal_logs.get(project_id, [])
+            return [TerminalLogEntry.from_dict(d) for d in bucket if not d.get("cleared_at")][-limit:]
+
+    def clear_terminal_logs(self, project_id: str) -> int:
+        with self._lock:
+            self._reload()
+            bucket = self._terminal_logs.get(project_id, [])
+            count = 0
+            now = _utcnow_iso()
+            for d in bucket:
+                if not d.get("cleared_at"):
+                    d["cleared_at"] = now
+                    count += 1
+            self._flush_terminal_logs()
+            return count
+
 
 # =========================================================
 # Factory — returns the configured store singleton
@@ -312,7 +403,10 @@ def get_store() -> RuntimeStoreBase:
         with _store_lock:
             if _store_instance is None:
                 from config import STORE_BACKEND
-                if STORE_BACKEND == "json_file":
+                if STORE_BACKEND == "supabase":
+                    from supabase_store import SupabaseStore
+                    _store_instance = SupabaseStore()
+                elif STORE_BACKEND == "json_file":
                     _store_instance = JsonFileStore()
                 else:
                     _store_instance = InMemoryStore()

@@ -161,4 +161,4 @@ export const AgentWalletFactoryABI = [
 		"stateMutability": "view",
 		"type": "function"
 	}
-]
+] as const;

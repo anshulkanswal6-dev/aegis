@@ -16,13 +16,17 @@ RUNTIME_DATA_DIR = BASE_DIR / ".runtime_data"
 # =========================================================
 # Runtime Store Backend
 # =========================================================
-# Options: "memory", "json_file"
-# Can be swapped to "supabase" later with minimal changes.
+# Options: "memory", "json_file", "supabase"
 STORE_BACKEND = os.getenv("AEGIS_STORE_BACKEND", "json_file")
+
+# Supabase Credentials (only used when STORE_BACKEND == "supabase")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 
 # Path for the JSON-file store (only used when STORE_BACKEND == "json_file")
 STORE_JSON_PATH = RUNTIME_DATA_DIR / "automations.json"
 LOGS_JSON_PATH = RUNTIME_DATA_DIR / "logs.json"
+TERMINAL_LOGS_JSON_PATH = RUNTIME_DATA_DIR / "terminal_logs.json"
 
 # =========================================================
 # Scheduler / Polling
@@ -51,5 +55,5 @@ DEMO_MODE = os.getenv("AEGIS_DEMO_MODE", "true").lower() == "true"
 # =========================================================
 # RPC defaults (used by execution_service when spec doesn't provide one)
 # =========================================================
-DEFAULT_RPC_URL = os.getenv("RPC_URL", "https://data-seed-prebsc-1-s1.bnbchain.org:8545")
-DEFAULT_CHAIN = os.getenv("DEFAULT_CHAIN", "bsc-testnet")
+DEFAULT_RPC_URL = os.getenv("RPC_URL", "https://testnet-rpc.monad.xyz")
+DEFAULT_CHAIN = os.getenv("DEFAULT_CHAIN", "monad-testnet")

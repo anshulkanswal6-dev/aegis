@@ -34,7 +34,7 @@ export const useProjectStore = create<ProjectState>((set) => ({
         name,
         prompt,
         status: 'draft',
-        chain: 'BNB',
+        chain: 'MON',
         lastUpdated: new Date().toISOString(),
         trigger: 'None',
         actions: [],

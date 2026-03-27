@@ -36,6 +36,7 @@ export const agentService = {
   async chat(
     userMessage: string,
     sessionId?: string,
+    walletAddress?: string,
     knownFields?: Record<string, any>,
     planningModelId?: string,
     codegenModelId?: string
@@ -48,6 +49,7 @@ export const agentService = {
       body: JSON.stringify({
         user_message: userMessage,
         session_id: sessionId || undefined,
+        wallet_address: walletAddress || undefined,
         known_fields: knownFields || {},
         planning_model_id: planningModelId || undefined,
         codegen_model_id: codegenModelId || undefined,
@@ -65,6 +67,7 @@ export const agentService = {
   async continueChat(
     sessionId: string,
     fields: Record<string, any>,
+    walletAddress?: string,
     planningModelId?: string
   ): Promise<AgentResponse> {
     console.log(`[AgentService] Continue session: ${sessionId}`);
@@ -75,6 +78,7 @@ export const agentService = {
       body: JSON.stringify({
         session_id: sessionId,
         fields: fields,
+        wallet_address: walletAddress || undefined,
         planning_model_id: planningModelId || undefined,
       })
     });
@@ -143,6 +147,7 @@ export const agentService = {
   async deploy(
     name: string,
     specJson: Record<string, any>,
+    walletAddress?: string,
     sessionId?: string,
     description?: string,
     files?: Record<string, string>
@@ -156,6 +161,7 @@ export const agentService = {
         name,
         description: description || '',
         session_id: sessionId || '',
+        wallet_address: walletAddress || '',
         spec_json: specJson,
         files: files || {},
       })
@@ -205,6 +211,18 @@ export const agentService = {
   async getAutomationLogs(automationId: string, limit: number = 50): Promise<any> {
     const response = await fetch(`${API_BASE}/automations/${automationId}/logs?limit=${limit}`);
     if (!response.ok) throw new Error('Failed to get automation logs');
+    return await response.json();
+  },
+
+  async getTerminalLogs(sessionId: string, limit: number = 100): Promise<any> {
+    const response = await fetch(`${API_BASE}/automations/terminal/${sessionId}/logs?limit=${limit}`);
+    if (!response.ok) throw new Error('Failed to get terminal logs');
+    return await response.json();
+  },
+
+  async clearTerminalLogs(sessionId: string): Promise<any> {
+    const response = await fetch(`${API_BASE}/automations/terminal/${sessionId}/clear`, { method: 'POST' });
+    if (!response.ok) throw new Error('Failed to clear terminal logs');
     return await response.json();
   },
 };

@@ -70,6 +70,9 @@ def action_send_native_token(params: Dict[str, Any], ctx: ActionContext) -> Dict
     if not ctx.wallet_address:
         return {"success": False, "error": "Missing Agent Wallet address in context"}
 
+    amount_eth = float(params.get("amount", 0))
+    print(f"[AEGIS] Executing action_send_native_token (amount: {amount_eth})")
+    
     # Use backend executor key from .env (can also be passed in ctx.secrets)
     executor_key = (ctx.secrets or {}).get("private_key") or os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
     if not executor_key:
@@ -78,40 +81,146 @@ def action_send_native_token(params: Dict[str, Any], ctx: ActionContext) -> Dict
     w3 = Web3(Web3.HTTPProvider(ctx.rpc_url))
     try:
         executor_account = w3.eth.account.from_key(executor_key)
-        agent_wallet_address = w3.to_checksum_address(ctx.wallet_address)
-        recipient_address = w3.to_checksum_address(params["recipient_address"])
+        def clean_addr(a):
+            if not isinstance(a, str): return a
+            return re.sub(r'[^a-fA-F0-9xX]', '', a).strip()
+
+        agent_wallet_address = w3.to_checksum_address(clean_addr(ctx.wallet_address))
+        recipient_address = w3.to_checksum_address(clean_addr(params["recipient_address"]))
         amount_wei = w3.to_wei(amount_eth, 'ether')
 
-        # ABI for executeETH(target, amount, data)
-        # We call the AgentWallet contract, which in turn transfers ETH to recipient
-        abi = [{
-            "type": "function", "name": "executeETH",
-            "inputs": [{"name": "target", "type": "address"}, {"name": "amount", "type": "uint256"}, {"name": "data", "type": "bytes"}],
-            "outputs": [{"name": "result", "type": "bytes"}], "stateMutability": "nonpayable"
-        }]
+        # Full ABI for preflight checks
+        # Based on AgentWallet.sol
+        abi = [
+            {
+                "type": "function", "name": "executeETH",
+                "inputs": [{"name": "target", "type": "address"}, {"name": "amount", "type": "uint256"}, {"name": "data", "type": "bytes"}],
+                "outputs": [{"name": "result", "type": "bytes"}], "stateMutability": "nonpayable"
+            },
+            {
+                "type": "function", "name": "executor",
+                "inputs": [], "outputs": [{"name": "", "type": "address"}],
+                "stateMutability": "view"
+            },
+            {
+                "type": "function", "name": "walletPaused",
+                "inputs": [], "outputs": [{"name": "", "type": "bool"}],
+                "stateMutability": "view"
+            },
+            {
+                "type": "function", "name": "allowedTargets",
+                "inputs": [{"name": "target", "type": "address"}],
+                "outputs": [{"name": "", "type": "bool"}],
+                "stateMutability": "view"
+            },
+            {
+                "type": "function", "name": "getEthBalance",
+                "inputs": [], "outputs": [{"name": "", "type": "uint256"}],
+                "stateMutability": "view"
+            }
+        ]
         contract = w3.eth.contract(address=agent_wallet_address, abi=abi)
+
+        # Logging execution context
+        print(f"[AEGIS PREFLIGHT] Starting transaction pre-flight checks...")
+        print(f"[AEGIS PREFLIGHT] Executor EOA: {executor_account.address}")
+        print(f"[AEGIS PREFLIGHT] Agent Wallet: {agent_wallet_address}")
+        print(f"[AEGIS PREFLIGHT] Recipient: {recipient_address}")
+        print(f"[AEGIS PREFLIGHT] Amount: {amount_eth} ETH ({amount_wei} wei)")
+        print(f"[AEGIS PREFLIGHT] RPC: {ctx.rpc_url}")
+        print(f"[AEGIS PREFLIGHT] Chain ID: {w3.eth.chain_id}")
+
+        # 1. Preflight executor authorization
+        authorized_executor = contract.functions.executor().call()
+        is_authorized = authorized_executor.lower() == executor_account.address.lower()
+        print(f"[AEGIS PREFLIGHT] Authorized Executor on-chain: {authorized_executor}")
+        if not is_authorized:
+            return {"success": False, "error": f"Executor mismatch. Contract expects {authorized_executor}, but backend is using {executor_account.address}"}
+
+        # 2. Preflight paused-state check
+        is_paused = contract.functions.walletPaused().call()
+        print(f"[AEGIS PREFLIGHT] Wallet Paused State: {is_paused}")
+        if is_paused:
+            return {"success": False, "error": f"Agent Wallet {agent_wallet_address} is currently paused"}
+
+        # 3. Verify balances (native token)
+        agent_balance = contract.functions.getEthBalance().call()
+        executor_balance = w3.eth.get_balance(executor_account.address)
+        print(f"[AEGIS PREFLIGHT] Agent Wallet Balance: {w3.from_wei(agent_balance, 'ether')} ETH")
+        print(f"[AEGIS PREFLIGHT] Executor EOA Balance (for Gas): {w3.from_wei(executor_balance, 'ether')} ETH")
+
+        if agent_balance < amount_wei:
+            return {"success": False, "error": f"Insufficient funds in Agent Wallet. Required: {amount_eth} ETH, Balance: {w3.from_wei(agent_balance, 'ether')} ETH"}
+
+        if executor_balance < w3.to_wei(0.005, 'ether'): # Rough safety margin for gas
+             print(f"[AEGIS WARNING] Executor EOA balance is very low ({w3.from_wei(executor_balance, 'ether')} ETH). Transaction might fail during submission.")
 
         # Build transaction
         nonce = w3.eth.get_transaction_count(executor_account.address)
-        tx = contract.functions.executeETH(recipient_address, amount_wei, b"").build_transaction({
+        func_call = contract.functions.executeETH(recipient_address, amount_wei, b"")
+        
+        # Gas estimation
+        try:
+            estimated_gas = func_call.estimate_gas({'from': executor_account.address})
+            gas_limit = int(estimated_gas * 1.2) # Add 20% buffer
+            print(f"[AEGIS PREFLIGHT] Estimated Gas: {estimated_gas}, Using Limit: {gas_limit}")
+        except Exception as ge:
+            gas_limit = 200000 
+            print(f"[AEGIS PREFLIGHT] Gas estimation failed: {str(ge)}. Defaulting to {gas_limit}")
+
+        tx = func_call.build_transaction({
             'from': executor_account.address,
             'nonce': nonce,
-            'gas': 100000, # Simplified estimation
+            'gas': gas_limit,
             'gasPrice': w3.eth.gas_price,
             'chainId': w3.eth.chain_id
         })
 
+        print(f"[AEGIS EXECUTION] Signing transaction...")
         signed_tx = w3.eth.account.sign_transaction(tx, executor_key)
+        
+        print(f"[AEGIS EXECUTION] Sending transaction to mempool...")
         tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
         tx_id = w3.to_hex(tx_hash)
+        print(f"[AEGIS EXECUTION] Transaction sent! Hash: {tx_id}")
 
-        return {
-            "success": True,
-            "action": "send_native_token",
-            "message": f"Successfully sent {amount_eth} native token from Agent Wallet {agent_wallet_address} to {recipient_address}",
-            "tx_hash": tx_id
-        }
+        print(f"[AEGIS EXECUTION] Waiting for confirmation...")
+        try:
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt.status == 1:
+                print(f"[AEGIS SUCCESS] Transaction confirmed in block {receipt.blockNumber}")
+                return {
+                    "success": True,
+                    "action": "send_native_token",
+                    "message": f"Successfully sent {amount_eth} native token from Agent Wallet {agent_wallet_address} to {recipient_address}",
+                    "tx_hash": tx_id,
+                    "gas_used": receipt.gasUsed,
+                    "block_number": receipt.blockNumber
+                }
+            else:
+                # Attempt to get revert reason
+                print(f"[AEGIS FAILURE] Transaction reverted on-chain.")
+                try:
+                    # Re-run simulation to get error message
+                    w3.eth.call(tx)
+                    revert_reason = "Unknown revert reason"
+                except Exception as ex:
+                    revert_reason = str(ex)
+                
+                return {
+                    "success": False,
+                    "error": f"On-chain execution reverted: {revert_reason}",
+                    "tx_hash": tx_id
+                }
+        except Exception as wait_err:
+             return {
+                "success": False,
+                "error": f"Timeout waiting for transaction confirmation: {tx_id}. Check explorer later.",
+                "tx_hash": tx_id
+            }
+
     except Exception as e:
+        print(f"[AEGIS ERROR] Caught exception in action_send_native_token: {str(e)}")
         return {"success": False, "error": f"On-chain execution failed: {str(e)}"}
 
 
@@ -120,12 +229,91 @@ def action_send_erc20(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, A
     validate_evm_address(params["token_address"], "token_address")
     validate_evm_address(params["recipient_address"], "recipient_address")
     amount = parse_numeric(params["amount"], "amount")
-    return {
-        "success": True,
-        "action": "send_erc20",
-        "message": f"Would send {amount} ERC20 from {params['token_address']} to {params['recipient_address']}",
-        "tx_hash": None
-    }
+
+    if not ctx.rpc_url:
+        return {"success": False, "error": "Missing RPC URL in context"}
+    if not ctx.wallet_address:
+        return {"success": False, "error": "Missing Agent Wallet address in context"}
+
+    executor_key = (ctx.secrets or {}).get("private_key") or os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    if not executor_key:
+        return {"success": False, "error": "Executor private key not configured"}
+
+    w3 = Web3(Web3.HTTPProvider(ctx.rpc_url))
+    try:
+        executor_account = w3.eth.account.from_key(executor_key)
+        agent_wallet_address = w3.to_checksum_address(ctx.wallet_address)
+        token_address = w3.to_checksum_address(params["token_address"])
+        recipient_address = w3.to_checksum_address(params["recipient_address"])
+
+        # Minimal ERC20 ABI to get decimals
+        erc20_abi = [{"type": "function", "name": "decimals", "inputs": [], "outputs": [{"type": "uint8"}], "stateMutability": "view"}]
+        token_contract = w3.eth.contract(address=token_address, abi=erc20_abi)
+        decimals = token_contract.functions.decimals().call()
+        amount_raw = int(amount * (10 ** decimals))
+
+        # Agent Wallet ABI
+        abi = [
+            {"type": "function", "name": "executeERC20Transfer", "inputs": [{"name": "token", "type": "address"}, {"name": "to", "type": "address"}, {"name": "amount", "type": "uint256"}], "outputs": [], "stateMutability": "nonpayable"},
+            {"type": "function", "name": "executor", "inputs": [], "outputs": [{"name": "", "type": "address"}], "stateMutability": "view"},
+            {"type": "function", "name": "walletPaused", "inputs": [], "outputs": [{"name": "", "type": "bool"}], "stateMutability": "view"},
+            {"type": "function", "name": "getTokenBalance", "inputs": [{"name": "token", "type": "address"}], "outputs": [{"name": "", "type": "uint256"}], "stateMutability": "view"}
+        ]
+        contract = w3.eth.contract(address=agent_wallet_address, abi=abi)
+
+        # Preflight checks
+        print(f"[AEGIS PREFLIGHT-ERC20] Target: {recipient_address}, Token: {token_address}")
+        
+        # 1. Executor Authorization
+        executor_on_chain = contract.functions.executor().call()
+        if executor_on_chain.lower() != executor_account.address.lower():
+            return {"success": False, "error": f"Executor mismatch. Contract expects {executor_on_chain}"}
+
+        # 2. Daily Token Limit & Balance
+        if contract.functions.walletPaused().call():
+            return {"success": False, "error": "Wallet paused"}
+
+        # 3. Agent Token Balance
+        agent_token_balance = contract.functions.getTokenBalance(token_address).call()
+        if agent_token_balance < amount_raw:
+            return {"success": False, "error": f"Insufficient token balance. Has: {agent_token_balance / (10**decimals)}, Needs: {amount}"}
+
+        # Build & Sign
+        nonce = w3.eth.get_transaction_count(executor_account.address)
+        func_call = contract.functions.executeERC20Transfer(token_address, recipient_address, amount_raw)
+        
+        try:
+            gas_limit = int(func_call.estimate_gas({'from': executor_account.address}) * 1.2)
+        except:
+            gas_limit = 200000
+
+        tx = func_call.build_transaction({
+            'from': executor_account.address,
+            'nonce': nonce,
+            'gas': gas_limit,
+            'gasPrice': w3.eth.gas_price,
+            'chainId': w3.eth.chain_id
+        })
+
+        signed_tx = w3.eth.account.sign_transaction(tx, executor_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        tx_id = w3.to_hex(tx_hash)
+
+        print(f"[AEGIS EXECUTION-ERC20] Waiting for confirmation: {tx_id}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        
+        if receipt.status == 1:
+            return {
+                "success": True,
+                "action": "send_erc20",
+                "message": f"Sent {amount} tokens to {recipient_address}",
+                "tx_hash": tx_id
+            }
+        else:
+            return {"success": False, "error": "ERC20 execution reverted", "tx_hash": tx_id}
+
+    except Exception as e:
+        return {"success": False, "error": f"ERC20 execution failed: {str(e)}"}
 
 
 def action_batch_send_erc20(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, Any]:

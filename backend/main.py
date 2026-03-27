@@ -46,12 +46,14 @@ async def global_exception_handler(request: Request, exc: Exception):
 class ChatRequest(BaseModel):
     user_message: str
     session_id: Optional[str] = None
+    wallet_address: Optional[str] = None # Added for Supabase identity
     known_fields: Dict[str, Any] = Field(default_factory=dict)
     planning_model_id: str = "gemini_flash"
     codegen_model_id: str = "gemini_flash"
 
 class ContinueRequest(BaseModel):
     session_id: str
+    wallet_address: Optional[str] = None # Added for Supabase identity
     fields: Dict[str, Any] = Field(default_factory=dict)
     planning_model_id: str = "gemini_flash"
 
@@ -71,6 +73,7 @@ async def chat(req: ChatRequest):
     return agent.chat(
         user_message=req.user_message,
         session_id=req.session_id,
+        wallet_address=req.wallet_address,
         known_fields=req.known_fields,
         planning_model_id=req.planning_model_id,
         codegen_model_id=req.codegen_model_id
@@ -81,6 +84,7 @@ async def continue_chat(req: ContinueRequest):
     return agent.continue_chat(
         session_id=req.session_id, 
         fields=req.fields,
+        wallet_address=req.wallet_address,
         planning_model_id=req.planning_model_id
     )
 

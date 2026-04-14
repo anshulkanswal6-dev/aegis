@@ -24,6 +24,7 @@ def execute_actions(
     automation_id: str = "unknown",
     owner_id: Optional[str] = None,
     project_name: str = "",
+    context_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Execute all actions defined in a spec_json.
@@ -67,6 +68,16 @@ def execute_actions(
         memory={},
     )
 
+    context_data = context_data or {}
+
+    def resolve_placeholders(text: Any) -> Any:
+        if not isinstance(text, str) or not context_data:
+            return text
+        res = text
+        for k, v in context_data.items():
+            res = res.replace(f"{{{{{k}}}}}", str(v))
+        return res
+
     actions = spec_json.get("actions", [])
     if not isinstance(actions, list):
         actions = [actions]
@@ -91,6 +102,10 @@ def execute_actions(
         if action_type in ["notify", "send_email_notification"]:
             if not action_params.get("message"):
                 action_params["message"] = action_params.get("body") or action_params.get("email_body") or "AEGIS Alert Triggered"
+            
+            # Apply placeholders to message
+            action_params["message"] = resolve_placeholders(action_params["message"])
+            
             if not action_params.get("to"):
                 action_params["to"] = action_params.get("email_address") or merged.get("to")
             if not action_params.get("subject"):
@@ -182,13 +197,14 @@ def execute_actions(
                     "project_name": local_project_name
                 }
                 if channel == "telegram":
-                    notify_params["message"] = notification_cfg.get("telegram", {}).get("message", "AEGIS Automation Triggered")
+                    msg = notification_cfg.get("telegram", {}).get("message", "AEGIS Automation Triggered")
+                    notify_params["message"] = resolve_placeholders(msg)
                 elif channel == "email":
                     email_cfg = notification_cfg.get("email", {})
                     notify_params.update({
                         "to": email_cfg.get("to") or merged.get("to") or email_cfg.get("email_address"),
                         "subject": email_cfg.get("subject") or email_cfg.get("email_subject") or "AEGIS Alert",
-                        "message": email_cfg.get("body") or email_cfg.get("email_body") or "Automation condition met."
+                        "message": resolve_placeholders(email_cfg.get("body") or email_cfg.get("email_body") or "Automation condition met.")
                     })
                 
                 # Execute via engine (it handles the adapter logic internally)

@@ -59,6 +59,8 @@ class AutomationRecord:
     # Agent-generated workspace files (for reference / export)
     files: Dict[str, str] = field(default_factory=dict)
     current_version_id: Optional[str] = None
+    # Persistent memory for triggers (e.g., last_known_balance)
+    memory: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

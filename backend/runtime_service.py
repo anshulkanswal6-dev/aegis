@@ -241,7 +241,7 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
         rpc_url=rpc_url,
         wallet_address=wallet_address,
         now=datetime.now(timezone.utc),
-        memory={},
+        memory=record.memory or {},
         automation_created_at=created_at_dt,
     )
 
@@ -254,7 +254,9 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
     log_service.log_info(automation_id, "trigger_check", f"Checking condition: {trigger_type}")
 
     try:
-        triggered = _trigger_engine.evaluate(trigger_type, trigger_params, ctx)
+        triggered, match_data = _trigger_engine.evaluate(trigger_type, trigger_params, ctx)
+        # Persist memory even if not triggered (e.g. updating last_known_balance)
+        store.update_automation(automation_id, {"memory": ctx.memory})
     except Exception as e:
         log_service.log_exception(automation_id, "trigger_error", e)
         store.update_automation(automation_id, {
@@ -275,7 +277,14 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
         def _log_fn(event: str, message: str, details: Optional[Dict] = None):
             log_service.log_info(automation_id, event, message, details)
 
-        result = execution_service.execute_actions(spec, _log_fn, automation_id=automation_id, owner_id=record.user_id, project_name=record.name)
+        result = execution_service.execute_actions(
+            spec, 
+            _log_fn, 
+            automation_id=automation_id, 
+            owner_id=record.user_id, 
+            project_name=record.name,
+            context_data=match_data
+        )
 
         # Calculate next_run_at
         interval_seconds = _get_interval_from_spec(spec)

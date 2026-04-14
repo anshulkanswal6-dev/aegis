@@ -404,9 +404,39 @@ def trigger_wallet_balance_above(params: Dict[str, Any], ctx: TriggerContext) ->
 
 
 def trigger_incoming_transfer_detected(params: Dict[str, Any], ctx: TriggerContext) -> bool:
+    # Alias to balance_increased for now
+    return trigger_balance_increased(params, ctx)
+
+
+def trigger_balance_increased(params: Dict[str, Any], ctx: TriggerContext) -> tuple[bool, Dict[str, Any]]:
     ensure_token_field(params)
-    validate_required_fields(params, ["token"])
-    return False
+    token = params["token"]
+    if not ctx.wallet_address:
+         return False, {}
+    
+    current_balance = fetch_wallet_balance(ctx.wallet_address, token, rpc_url=ctx.rpc_url)
+    
+    # Memory key for this specific token
+    mem_key = f"last_balance_{token.upper()}"
+    last_balance = ctx.memory.get(mem_key)
+    
+    # Initialize if missing
+    if last_balance is None:
+        ctx.memory[mem_key] = current_balance
+        return False, {}
+        
+    last_balance = float(last_balance)
+    delta = current_balance - last_balance
+    
+    # Minimum threshold (default 0.000001)
+    min_amount = parse_numeric(params.get("minimum_amount") or params.get("threshold") or 0.000001)
+    
+    triggered = delta >= min_amount
+    
+    # Update memory regardless
+    ctx.memory[mem_key] = current_balance
+    
+    return triggered, {"delta": delta, "amount": delta, "new_balance": current_balance}
 
 
 def trigger_outgoing_transfer_detected(params: Dict[str, Any], ctx: TriggerContext) -> bool:
@@ -610,7 +640,8 @@ def trigger_all_conditions_true(params: Dict[str, Any], ctx: TriggerContext) -> 
     if not isinstance(conditions, list):
         raise TriggerValidationError("conditions must be a list")
     engine = TriggerEngine()
-    return all(engine.evaluate(cond["type"], cond.get("params", {}), ctx) for cond in conditions)
+    results = [engine.evaluate(cond["type"], cond.get("params", {}), ctx) for cond in conditions]
+    return all(r[0] for r in results)
 
 
 def trigger_any_condition_true(params: Dict[str, Any], ctx: TriggerContext) -> bool:
@@ -619,7 +650,8 @@ def trigger_any_condition_true(params: Dict[str, Any], ctx: TriggerContext) -> b
     if not isinstance(conditions, list):
         raise TriggerValidationError("conditions must be a list")
     engine = TriggerEngine()
-    return any(engine.evaluate(cond["type"], cond.get("params", {}), ctx) for cond in conditions)
+    results = [engine.evaluate(cond["type"], cond.get("params", {}), ctx) for cond in conditions]
+    return any(r[0] for r in results)
 
 
 def trigger_condition_true_for_duration(params: Dict[str, Any], ctx: TriggerContext) -> bool:
@@ -627,7 +659,8 @@ def trigger_condition_true_for_duration(params: Dict[str, Any], ctx: TriggerCont
     # actual persistent evaluation should use run history/state
     engine = TriggerEngine()
     condition = params["condition"]
-    return engine.evaluate(condition["type"], condition.get("params", {}), ctx)
+    res, _ = engine.evaluate(condition["type"], condition.get("params", {}), ctx)
+    return res
 
 
 def trigger_retry_until_success_with_timeout(params: Dict[str, Any], ctx: TriggerContext) -> bool:
@@ -736,6 +769,7 @@ TRIGGER_REGISTRY: Dict[str, Callable[[Dict[str, Any], TriggerContext], bool]] = 
     "step_started": trigger_step_started,
     "step_completed": trigger_step_completed,
     "step_failed": trigger_step_failed,
+    "balance_increased": trigger_balance_increased,
 }
 
 
@@ -743,12 +777,16 @@ class TriggerEngine:
     def __init__(self, registry: Optional[Dict[str, Callable[[Dict[str, Any], TriggerContext], bool]]] = None):
         self.registry = registry or TRIGGER_REGISTRY
 
-    def evaluate(self, trigger_type: str, params: Dict[str, Any], ctx: Optional[TriggerContext] = None) -> bool:
+    def evaluate(self, trigger_type: str, params: Dict[str, Any], ctx: Optional[TriggerContext] = None) -> tuple[bool, Dict[str, Any]]:
         ctx = ctx or TriggerContext()
         handler = self.registry.get(trigger_type)
         if not handler:
             raise UnsupportedTriggerError(f"Unsupported trigger: {trigger_type}")
-        return handler(params, ctx)
+        
+        result = handler(params, ctx)
+        if isinstance(result, bool):
+            return result, {}
+        return result
 
 
 # =========================================================

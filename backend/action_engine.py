@@ -75,8 +75,8 @@ def action_send_native_token(params: Dict[str, Any], ctx: ActionContext) -> Dict
     amount_eth = float(params.get("amount", 0))
     print(f"[AEGIS] Executing action_send_native_token (amount: {amount_eth})")
     
-    # Use backend executor key from .env (can also be passed in ctx.secrets)
-    executor_key = (ctx.secrets or {}).get("private_key") or os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    # Use backend executor key from centrally validated config
+    executor_key = (ctx.secrets or {}).get("private_key") or config.EXECUTOR_PRIVATE_KEY
     if not executor_key:
         return {"success": False, "error": "Executor private key not configured in backend .env"}
 
@@ -237,7 +237,7 @@ def action_send_erc20(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, A
     if not ctx.wallet_address:
         return {"success": False, "error": "Missing Agent Wallet address in context"}
 
-    executor_key = (ctx.secrets or {}).get("private_key") or os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+    executor_key = (ctx.secrets or {}).get("private_key") or config.EXECUTOR_PRIVATE_KEY
     if not executor_key:
         return {"success": False, "error": "Executor private key not configured"}
 

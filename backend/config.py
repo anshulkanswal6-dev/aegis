@@ -81,19 +81,62 @@ def check_env_vars():
     SYSTEM_STATUS["env_vars"] = vars_to_check
     return vars_to_check
 
+# --- Feature Flags (Computed) ---
+check_env_vars()
+
+# Subsystem Status Flags
+SMTP_CONFIG_READY = bool(SMTP_USER and SMTP_PASS)
+TELEGRAM_CONFIG_READY = bool(TELEGRAM_BOT_TOKEN)
+SUPABASE_CONFIG_READY = bool(SUPABASE_URL and SUPABASE_KEY)
+BLOCKCHAIN_CONFIG_READY = bool(EXECUTOR_PRIVATE_KEY and RPC_URL)
+
+def get_system_report():
+    """Build a report of the current system status for API/UI visibility."""
+    return {
+        "identity": {
+            "name": CHAIN_NAME,
+            "symbol": CURRENCY_SYMBOL,
+            "chain_id": CHAIN_ID
+        },
+        "features": {
+            "email": SMTP_CONFIG_READY,
+            "telegram": TELEGRAM_CONFIG_READY,
+            "storage": STORE_BACKEND if SUPABASE_CONFIG_READY else "memory",
+            "execution": BLOCKCHAIN_CONFIG_READY
+        },
+        "health": "healthy" if (SUPABASE_CONFIG_READY and BLOCKCHAIN_CONFIG_READY) else "degraded"
+    }
+
 def validate_config():
-    """Return a report of the current configuration status."""
-    env = check_env_vars()
+    """Print a startup report and return missing critical vars."""
+    env = SYSTEM_STATUS["env_vars"]
     report = []
     
-    print("\n--- AEGIS STARTUP ENV CHECK ---")
-    for var, exists in env.items():
-        status = "✅ PRESENT" if exists else "❌ MISSING"
-        print(f"  {var.ljust(22)}: {status}")
-        if not exists:
-            report.append(var)
-    print("-------------------------------\n")
+    print("\n" + "="*40)
+    print(" AEGIS SYSTEM STARTUP ".center(40, "="))
+    print("="*40)
+    
+    # Infrastructure
+    infra = [
+        ("Gemini AI", bool(GEMINI_API_KEY)),
+        ("Supabase", SUPABASE_CONFIG_READY),
+        ("Blockchain", BLOCKCHAIN_CONFIG_READY),
+        ("Telegram", TELEGRAM_CONFIG_READY),
+        ("SMTP/Email", SMTP_CONFIG_READY),
+    ]
+    
+    for label, active in infra:
+        status = "✅ READY" if active else "❌ DISABLED / MISSING"
+        print(f"  {label.ljust(15)}: {status}")
+        if not active:
+            report.append(label)
+            
+    print("="*40)
+    print(f" [Chain] {CHAIN_NAME} ({CHAIN_ID})")
+    print(f" [RPC]   {RPC_URL}")
+    print("="*40 + "\n")
+    
     return report
 
-# Perform check on load but don't crash the module
-check_env_vars()
+# Perform initial check
+validate_config()

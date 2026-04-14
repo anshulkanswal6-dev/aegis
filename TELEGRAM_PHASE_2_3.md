@@ -1,4 +1,4 @@
-# AEGIS Telegram Integration — Phase 2 & 3
+# AEGIS Telegram Setup Guide
 
 This document covers the architecture, setup, and usage of the Telegram integration for AEGIS.
 

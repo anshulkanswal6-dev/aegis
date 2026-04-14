@@ -25,7 +25,8 @@ def _write(automation_id: str, level: str, event: str, message: str, details: Op
     store = get_store()
     store.add_log(entry)
     # Also print to console for demo visibility
-    print(f"[AEGIS {level.upper()}] [{automation_id[:8]}] {event}: {message}")
+    safe_msg = message.encode('ascii', 'replace').decode('ascii')
+    print(f"[AEGIS {level.upper()}] [{automation_id[:8]}] {event}: {safe_msg}")
     return entry
 
 
@@ -76,10 +77,16 @@ def log_terminal(project_id: str, message: str, level: str = "info") -> Terminal
         level=level,
         message=message
     )
-    store = get_store()
-    store.add_terminal_log(entry)
-    # Also print to console
-    # print(f"[TERMINAL] [{project_id[:8]}] {message}")
+    try:
+        store = get_store()
+        store.add_terminal_log(entry)
+    except Exception as e:
+        # If DB persists error (e.g. FK violation), we just log to stdout
+        print(f"[AEGIS TERMINAL LOG ERROR] Could not persist log to store: {e}")
+    
+    # Also print to console for internal visibility
+    safe_message = message.encode('ascii', 'replace').decode('ascii')
+    print(f"[TERMINAL] [{project_id[:8]}] {safe_message}")
     return entry
 
 

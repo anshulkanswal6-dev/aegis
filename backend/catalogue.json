@@ -194,6 +194,10 @@
     "to": {
       "type": "email",
       "question": "Which email should receive notifications?"
+    },
+    "notification_cooldown": {
+      "type": "number",
+      "question": "How many seconds should we wait between notifications? (Optional, default is 300s)"
     }
   },
   "triggers": [

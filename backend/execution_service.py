@@ -23,6 +23,8 @@ def execute_actions(
     spec_json: Dict[str, Any],
     log_fn: Optional[Callable] = None,
     automation_id: str = "unknown",
+    owner_id: Optional[str] = None,
+    project_name: str = "",
 ) -> Dict[str, Any]:
     """
     Execute all actions defined in a spec_json.
@@ -31,6 +33,8 @@ def execute_actions(
         spec_json: The automation specification with trigger/actions/params.
         log_fn: Optional callable(event, message, details) for logging.
         automation_id: Unique ID for the automation being executed.
+        owner_id: Optional owner Profile ID.
+        project_name: Optional project name for notifications.
 
     Returns:
         {"success": bool, "results": [...], "errors": [...]}
@@ -58,6 +62,8 @@ def execute_actions(
         rpc_url=rpc_url,
         wallet_address=wallet_address,
         automation_id=automation_id,
+        owner_id=owner_id,
+        project_name=project_name or spec_json.get("project_name"),
         secrets={"private_key": os.getenv("PRIVATE_KEY", "")},
         memory={},
     )
@@ -131,7 +137,7 @@ def execute_actions(
                     "action_type": action_type,
                     "error": result.get("error", "Action returned success=False"),
                 })
-                # ABORT remaining actions (like notifications) if a critical action fails
+                # ABORT remaining actions if a critical action fails
                 safe_log("execution_aborted", "stopping automation cycle due to action failure", {"failed_index": i})
                 break
 
@@ -146,7 +152,61 @@ def execute_actions(
             safe_log("action_error", f"Action {action_type} failed with exception: {str(e)}", error_info)
             break
 
-    overall_success = len(errors) == 0
+    # 3. Handle Structured Notifications
+    notification_cfg = spec_json.get("notification")
+    if notification_cfg and isinstance(notification_cfg, dict):
+        channels = notification_cfg.get("channels", [])
+        if not isinstance(channels, list): channels = [channels]
+        
+        safe_log("notification_start", f"Processing notifications for channels: {', '.join(channels)}", {"channels": channels})
+        
+        cooldown = notification_cfg.get("cooldown") or notification_cfg.get("notification_cooldown") or merged.get("notification_cooldown")
+        local_project_name = project_name or spec_json.get("project_name", "AEGIS Project")
+        
+        for channel in channels:
+            if channel == "none": continue
+            
+            try:
+                # Reuse the existing action_notify logic but with specific params
+                notify_params = {
+                    "channel": channel, 
+                    "notification_cooldown": cooldown,
+                    "project_name": local_project_name
+                }
+                if channel == "telegram":
+                    notify_params["message"] = notification_cfg.get("telegram", {}).get("message", "AEGIS Automation Triggered")
+                elif channel == "email":
+                    email_cfg = notification_cfg.get("email", {})
+                    notify_params.update({
+                        "to": email_cfg.get("to") or merged.get("to"),
+                        "subject": email_cfg.get("subject") or email_cfg.get("email_subject") or "AEGIS Alert",
+                        "message": email_cfg.get("body") or email_cfg.get("email_body") or "Automation condition met."
+                    })
+                
+                # Execute via engine (it handles the adapter logic internally)
+                notify_result = _action_engine.execute("notify", notify_params, ctx)
+                
+                if notify_result.get("success"):
+                    safe_log("notification_sent", f"Notification delivered via {channel}", {"channel": channel})
+                else:
+                    error_reason = notify_result.get("error")
+                    # If it's a cooldown, don't log as 'failed'-fatal, log as 'skipped'
+                    if error_reason == "cooldown_active":
+                        safe_log("notification_skipped", f"Notification via {channel} skipped (cooldown active)", {"channel": channel})
+                    else:
+                        safe_log("notification_failed", f"Failed to send {channel} notification: {error_reason}", {"channel": channel})
+                        # NEW: Count notification failure as an execution error
+                        errors.append({
+                            "type": "notification",
+                            "channel": channel,
+                            "error": error_reason
+                        })
+            
+            except Exception as ne:
+                safe_log("notification_error", f"Error during {channel} notification dispatch: {str(ne)}", {"channel": channel})
+                errors.append({"type": "notification", "channel": channel, "error": str(ne)})
+
+    overall_success = (len(errors) == 0)
     return {
         "success": overall_success,
         "total_actions": len(actions),

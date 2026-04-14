@@ -38,6 +38,7 @@ yarn-error.log*
 
 # AEGIS Specific
 backend/.runtime_data/
+backend/sessions.json
 backend/addr.txt
 backend/compilation_error.txt
 backend/models_out.txt

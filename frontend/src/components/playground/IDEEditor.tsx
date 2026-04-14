@@ -1,5 +1,9 @@
-import Editor from '@monaco-editor/react';
+import Editor, { loader } from '@monaco-editor/react';
 import { cn } from '../../lib/utils/cn';
+import { useThemeStore } from '../../hooks/useTheme';
+
+// CRITICAL: Prevent duplicate Monaco loading which causes "Duplicate definition of module" errors
+loader.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.43.0/min/vs' } });
 
 interface IDEEditorProps {
   id: string; // Unique ID to force re-render
@@ -11,6 +15,9 @@ interface IDEEditorProps {
 }
 
 export function IDEEditor({ id, value, language, onChange, onCursorChange, className }: IDEEditorProps) {
+  const { resolvedTheme } = useThemeStore();
+  const editorTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'vs';
+
   // Map internal language names to Monaco-supported IDs
   const monacoLanguage = language === 'python' ? 'python' : 
                         language === 'json' ? 'json' : 
@@ -51,7 +58,7 @@ export function IDEEditor({ id, value, language, onChange, onCursorChange, class
 
   return (
     <div className={cn(
-      "flex-1 flex flex-col relative bg-[#1e1e1e] z-10",
+      "flex-1 flex flex-col relative z-10 th-surface",
       className
     )}>
       <Editor
@@ -61,7 +68,7 @@ export function IDEEditor({ id, value, language, onChange, onCursorChange, class
         language={monacoLanguage}
         defaultLanguage={monacoLanguage}
         value={value || ""}
-        theme="vs-dark"
+        theme={editorTheme}
         onChange={(val) => onChange?.(val || "")}
         onMount={handleEditorDidMount}
         options={{
@@ -75,7 +82,7 @@ export function IDEEditor({ id, value, language, onChange, onCursorChange, class
           readOnly: false,
           cursorStyle: 'line',
           automaticLayout: true,
-          padding: { top: 20, bottom: 20 },
+          padding: { top: 12, bottom: 12 },
           quickSuggestions: {
             other: true,
             comments: true,
@@ -113,7 +120,7 @@ export function IDEEditor({ id, value, language, onChange, onCursorChange, class
           }
         }}
         loading={
-          <div className="flex-1 flex items-center justify-center bg-[#1e1e1e] text-zinc-500 font-mono text-xs uppercase tracking-widest">
+          <div className="flex-1 flex items-center justify-center th-surface th-text-tertiary font-mono text-xs uppercase tracking-widest">
             Initializing Engine...
           </div>
         }

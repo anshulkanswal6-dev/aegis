@@ -112,7 +112,13 @@ class Worker:
                         )
                         sched.schedule_automation(record.id, interval)
             except Exception as e:
-                print(f"[AEGIS Worker] Poll loop error: {e}")
+                # NEW: Handle network transience gracefully
+                if "getaddrinfo failed" in str(e) or "Connection" in str(e):
+                    print(f"[AEGIS Worker] Network/DNS error: {e}. Retrying in 30s...")
+                    # Sleep an extra long time on network error
+                    time.sleep(25)
+                else:
+                    print(f"[AEGIS Worker] Poll loop error: {e}")
 
             # Sleep in small increments so stop is responsive
             for _ in range(POLLING_INTERVAL_SECONDS * 2):

@@ -56,6 +56,8 @@ class ActionContext:
     rpc_url: Optional[str] = None
     wallet_address: Optional[str] = None
     automation_id: Optional[str] = None
+    owner_id: Optional[str] = None # The Profile ID of the user who owns this automation
+    project_name: Optional[str] = None
     secrets: Optional[Dict[str, Any]] = None
     memory: Optional[Dict[str, Any]] = None
 
@@ -439,6 +441,67 @@ def action_log_message(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, 
     }
 
 
+def action_notify(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, Any]:
+    validate_required_fields(params, ["message"])
+    channel = params.get("channel", "email") # default to email
+    
+    notifier = NotificationAdapter()
+    
+    if channel == "email":
+        validate_required_fields(params, ["to", "subject"])
+        result = notifier.send_email(
+            to_email=params["to"],
+            subject=params["subject"],
+            body=params["message"],
+            automation_id=ctx.automation_id or "unknown",
+            wallet=ctx.wallet_address or "unknown",
+            cooldown=params.get("notification_cooldown") or params.get("cooldown"),
+            project_name=params.get("project_name") or ctx.project_name or ""
+        )
+    elif channel == "telegram":
+        # CRITICAL FIX: Use owner_id (Profile UUID) from context, NOT the wallet address.
+        profile_id = ctx.owner_id
+        
+        if not profile_id and ctx.wallet_address:
+             from runtime_store import get_store
+             store = get_store()
+             profile_id = store.ensure_profile(ctx.wallet_address)
+        
+        if not profile_id:
+            return {"success": False, "error": "missing_owner_context"}
+        
+        result = notifier.send_telegram(
+            user_id=profile_id,
+            message=params["message"],
+            automation_id=ctx.automation_id or "unknown",
+            cooldown=params.get("notification_cooldown") or params.get("cooldown"),
+            project_name=params.get("project_name") or ctx.project_name or ""
+        )
+    else:
+        return {"success": False, "error": f"unsupported_channel: {channel}"}
+        
+    success = result.get("success", False)
+    error_msg = result.get("error")
+    
+    return {
+        "success": success,
+        "action": "notify",
+        "channel": channel,
+        "error": error_msg, # Ensure error is in the outer dict for the execution_service to log correctly
+        "message": "Notification delivered" if success else _format_notify_error(channel, error_msg)
+    }
+
+def _format_notify_error(channel: str, error: str) -> str:
+    if channel == "telegram":
+        if error == "no_account_linked":
+            return "Telegram not linked. Please go to the Integrations tab and link your account."
+        if error == "missing_chat_id":
+            return "Telegram chat ID missing. Try unlinking and relinking your account."
+    if channel == "email" and error == "SMTP not configured":
+        return "Email system not configured on backend."
+    return f"Failed to send {channel} notification: {error}"
+
+
 def action_get_balance(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, Any]:
     validate_required_fields(params, ["address"])
     validate_evm_address(params["address"], "address")
@@ -505,6 +568,7 @@ ACTION_REGISTRY: Dict[str, Callable[[Dict[str, Any], ActionContext], Dict[str, A
     "list_nft": action_list_nft,
     "log_message": action_log_message,
     "get_balance": action_get_balance,
+    "notify": action_notify,
 }
 
 

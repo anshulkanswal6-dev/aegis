@@ -5,6 +5,8 @@ interface TerminalState {
   logs: TerminalLog[];
   isExpanded: boolean;
   addLog: (log: Omit<TerminalLog, 'id' | 'timestamp'>) => void;
+  height: number;
+  setHeight: (height: number) => void;
   clearLogs: () => void;
   toggleExpanded: () => void;
   setExpanded: (expanded: boolean) => void;
@@ -13,6 +15,8 @@ interface TerminalState {
 export const useTerminalStore = create<TerminalState>((set) => ({
   logs: [],
   isExpanded: false,
+  height: 256,
+  setHeight: (height: number) => set({ height }),
   addLog: (log) =>
     set((state) => ({
       logs: [

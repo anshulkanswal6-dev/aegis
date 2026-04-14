@@ -14,23 +14,23 @@ export function DangerZoneCard() {
   };
 
   return (
-    <div className="p-8 bg-rose-50/30 border border-rose-100 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group">
-      <div className="flex items-center gap-4 pb-6 border-b border-rose-100/50">
-        <div className="w-10 h-10 rounded-xl bg-rose-500 flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform">
+    <div className="p-8 bg-rose-50/30 dark:bg-rose-500/5 border border-rose-100 dark:border-rose-500/20 rounded-2xl shadow-sm space-y-8 relative overflow-hidden group">
+      <div className="flex items-center gap-4 pb-6 border-b border-rose-100/50 dark:border-rose-500/10">
+        <div className="w-10 h-10 rounded-xl bg-rose-500 flex items-center justify-center text-white shadow-md transition-transform">
           <Trash2 className="w-5 h-5" />
         </div>
         <div className="space-y-0.5">
-          <h2 className="text-sm font-bold text-rose-600 uppercase tracking-wider">Danger Zone</h2>
-          <p className="text-[10px] font-bold text-rose-400 uppercase tracking-widest leading-none">Cannot be undone</p>
+          <h2 className="text-sm font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Danger Zone</h2>
+          <p className="text-[10px] font-bold text-rose-400 dark:text-rose-500 uppercase tracking-widest leading-none">Cannot be undone</p>
         </div>
       </div>
 
       <div className="space-y-6">
-        <div className="flex items-start gap-4 p-4 rounded-xl bg-white border border-rose-100 shadow-sm">
-           <div className="p-1.5 rounded-lg bg-rose-50 text-rose-500">
+        <div className="flex items-start gap-4 p-4 rounded-xl th-surface border border-rose-100 dark:border-rose-500/20 shadow-sm">
+           <div className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-500">
               <AlertTriangle className="w-4 h-4" />
            </div>
-           <p className="text-[10px] text-rose-600/70 font-bold leading-relaxed uppercase tracking-wider">
+           <p className="text-[10px] text-rose-600/70 dark:text-rose-400/70 font-bold leading-relaxed uppercase tracking-wider">
               If you delete this agent, its wallet and files will be removed. Funds will stay on-chain.
            </p>
         </div>
@@ -39,10 +39,10 @@ export function DangerZoneCard() {
           variant="outline"
           onClick={() => setShowModal(true)}
           isLoading={isWithdrawing}
-          className="w-full h-12 rounded-xl border-rose-200 text-rose-600 font-bold text-xs hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all flex items-center justify-center gap-2 group/btn"
+          className="w-full h-12 rounded-xl !border-white/40 !text-white font-bold text-xs !hover:bg-white !hover:text-black transition-all flex items-center justify-center gap-2 group/btn"
         >
           <span>Delete Agent</span>
-          <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+          <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 !group-hover/btn:text-black transition-transform" />
         </Button>
       </div>
 
@@ -57,9 +57,9 @@ export function DangerZoneCard() {
       />
 
       {/* Subtle Background Accent */}
-      <div className="absolute -bottom-4 -right-4 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
+      {/* <div className="absolute -bottom-4 -right-4 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity">
          <Trash2 className="w-32 h-32 text-rose-900" />
-      </div>
+      </div> */}
     </div>
   );
 }

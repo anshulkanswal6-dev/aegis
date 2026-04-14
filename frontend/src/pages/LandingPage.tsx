@@ -3,231 +3,249 @@ import { CreateAgentWalletPanel } from '../components/onboarding/CreateAgentWall
 import { FundAgentWalletPanel } from '../components/onboarding/FundAgentWalletPanel';
 import { useAccount, useChainId } from 'wagmi';
 import { useAgentWallet } from '../hooks/useAgentWallet';
-import { ShieldCheck, ArrowRight, LayoutDashboard, Terminal, Search, Sparkles, Clock, CheckCircle2, PlayCircle } from 'lucide-react';
+import { ShieldCheck, ArrowRight, LayoutDashboard, Terminal, Search, Sparkles, Clock, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useProjectStore } from '../store/projectStore';
 import { Button } from '../components/ui/UIPack';
 import { cn } from '../lib/utils/cn';
 import { MONAD_TESTNET_ID } from '../lib/config/chains';
+import { GlobalHeader } from '../components/layout/Header';
 
+import logoPng from '../assets/Copy of AEGIS (640 x 640 px) (1).png';
 
-const RECENT_TASKS = [
-  { id: '#7821', name: 'Daily Treasury Swap', modified: '2 mins ago', status: 'Running', chain: 'Ethereum' },
-  { id: '#7819', name: 'Liquidity Rebalancer', modified: '12 hours ago', status: 'Complete', chain: 'Base' },
-  { id: '#7815', name: 'Yield Optimizer V3', modified: '2 days ago', status: 'Paused', chain: 'Mainnet' },
-];
+import { useAutomationStore } from '../store/automationStore';
+import { useEffect, useMemo } from 'react';
 
 export default function LandingPage() {
-  const { isConnected, address } = useAccount();
-  const chainId = useChainId();
-  const { agentWalletAddress, ethBalance } = useAgentWallet();
-  const navigate = useNavigate();
+   const { isConnected, address } = useAccount();
+   const chainId = useChainId();
+   const { agentWalletAddress, ethBalance } = useAgentWallet();
+   const navigate = useNavigate();
+   const { projects, fetchProjects } = useProjectStore();
+   const { automations, fetchAutomations } = useAutomationStore();
 
-  const isCorrectChain = chainId === MONAD_TESTNET_ID;
-  const currentStep = (!isConnected || !address || !isCorrectChain) ? 1 : !agentWalletAddress ? 2 : ethBalance === 0n ? 3 : 4;
+   useEffect(() => {
+      fetchAutomations();
+      if (address) {
+         fetchProjects(address);
+      }
+   }, [address, fetchProjects, fetchAutomations]);
 
-  const steps = [
-    { number: 1, title: 'Connect Wallet', description: 'Authorize your node session.' },
-    { number: 2, title: 'Create Agent', description: 'Initialize your on-chain worker.' },
-    { number: 3, title: 'Fund Account', description: 'Enable autonomous transactions.' },
-    { number: 4, title: 'Ready to Build', description: 'Launch your first automation.' },
-  ];
+   const recentProjects = useMemo(() => {
+      return projects.slice(0, 3).map(p => {
+         const isDeployed = automations.some(a => a.name.toLowerCase() === p.name.toLowerCase());
+         return { ...p, isDeployed };
+      });
+   }, [projects, automations]);
 
-  return (
-    <div className="min-h-screen bg-[#f9f9f9] text-black">
-      {/* Hero Section */}
-      <section className="pt-24 pb-20 px-8 flex flex-col items-center text-center">
-        <div className="max-w-4xl w-full space-y-8">
-          <div className="space-y-4">
-             <div className="inline-flex items-center gap-2 px-3 py-1 bg-black text-white rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg">
-                <Sparkles className="w-3.5 h-3.5" />
-                Next-Gen Automation
-             </div>
-             <h1 className="text-6xl font-black tracking-tight leading-[0.95] text-black md:text-7xl">
-                Scale your on-chain <br /> operations with AI.
-             </h1>
-             <p className="text-zinc-500 text-lg font-medium max-w-2xl mx-auto tracking-tight">
-                The first intelligent operating system for decentralized autonomous agents. 
-                Build, deploy, and scale complex automations in plain English.
-             </p>
-          </div>
+   const getStatusDisplay = (p: any) => {
+      const status = p.status.toLowerCase();
+      if (p.isDeployed && status === 'draft') return 'paused';
+      if (status === 'ready') return 'paused';
+      return status;
+   };
 
-          {/* Premium Prompt Input */}
-          <div className="max-w-2xl mx-auto w-full group relative">
-             <div className="absolute inset-0 bg-black/5 blur-3xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000 -z-10" />
-             <div className="bg-white border border-[#eeeeee] p-2 rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.05)] flex items-center gap-4 focus-within:ring-1 focus-within:ring-black/10 transition-all">
-                <div className="w-12 h-12 rounded-xl bg-zinc-50 flex items-center justify-center border border-zinc-100 transition-transform group-hover:scale-95">
-                   <Search className="w-5 h-5 text-zinc-400" />
-                </div>
-                <input 
-                  type="text" 
-                  placeholder="What will you build today? (e.g. Daily treasury swap for USDC to ETH)"
-                  className="flex-1 bg-transparent border-none outline-none text-base font-medium placeholder:text-zinc-300"
-                />
-                <button 
-                  onClick={() => navigate('/playground')}
-                  className="bg-black text-white h-12 px-6 rounded-xl font-bold text-sm hover:scale-[1.02] active:scale-95 transition-all shadow-lg"
-                >
-                   Build
-                </button>
-             </div>
-          </div>
+   const isCorrectChain = chainId === MONAD_TESTNET_ID;
+   const currentStep = (!isConnected || !address || !isCorrectChain) ? 1 : !agentWalletAddress ? 2 : ethBalance === 0n ? 3 : 4;
+
+   const steps = [
+      { number: 1, title: 'Connect Wallet', description: 'Authorize your node session.' },
+      { number: 2, title: 'Create Agent', description: 'Initialize your on-chain worker.' },
+      { number: 3, title: 'Fund Account', description: 'Enable autonomous transactions.' },
+      { number: 4, title: 'Ready to Build', description: 'Launch your first automation.' },
+   ];
+
+   return (
+     <div className="min-h-screen th-bg th-text">
+        <div className="max-w-7xl mx-auto px-8 py-0 relative">
+          <GlobalHeader />
         </div>
-      </section>
+       
 
-      {/* Onboarding Section */}
-      <section className="max-w-5xl mx-auto px-8 py-16">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
-          {/* Stepper Side */}
-          <div className="lg:col-span-5 space-y-12">
-             <div className="space-y-4">
-                <h2 className="text-3xl font-black tracking-tight">Onboarding Guide</h2>
-                <p className="text-zinc-400 font-medium">Follow these steps to initialize your agent workspace and start building.</p>
-             </div>
-             <div className="space-y-8">
-                {steps.map((step) => (
-                   <div key={step.number} className={cn(
-                      "flex items-start gap-5 transition-opacity",
-                      currentStep < step.number && "opacity-30"
-                   )}>
-                      <div className={cn(
-                         "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border transition-all",
-                         currentStep === step.number ? "bg-black text-white border-black shadow-lg scale-110" : "bg-white text-zinc-400 border-[#eeeeee]"
-                      )}>
-                         {currentStep > step.number ? <CheckCircle2 className="w-6 h-6 text-black" /> : `0${step.number}`}
-                      </div>
-                      <div className="space-y-1 pt-1">
-                         <h3 className="font-bold text-sm tracking-tight">{step.title}</h3>
-                         <p className="text-[11px] text-zinc-400 font-medium leading-relaxed">{step.description}</p>
-                      </div>
-                   </div>
-                ))}
-             </div>
-          </div>
-
-          {/* Interaction Card Side */}
-          <div className="lg:col-span-7">
-             <div className="surface-card bg-white p-10 rounded-[32px] border border-[#eeeeee] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.03)] min-h-[400px] flex flex-col justify-center">
-                {currentStep === 1 && <ConnectWalletCard />}
-                {currentStep === 2 && <CreateAgentWalletPanel />}
-                {currentStep === 3 && <FundAgentWalletPanel />}
-
-                {currentStep === 4 && (
-                  <div className="text-center space-y-10 py-6">
-                     <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto shadow-sm border border-emerald-100">
-                        <ShieldCheck className="w-10 h-10" />
-                     </div>
-                     <div className="space-y-3">
-                        <h2 className="text-3xl font-black tracking-tight">Node Activated</h2>
-                        <p className="text-zinc-400 font-medium max-w-sm mx-auto">Your on-chain cluster is persistent and ready for deployment.</p>
-                     </div>
-                     <div className="flex flex-col gap-3 max-w-xs mx-auto pt-4">
-                        <Button 
-                            onClick={() => navigate('/playground')} 
-                            size="lg"
-                            className="bg-black hover:bg-zinc-800 h-14 rounded-2xl text-sm font-bold shadow-xl shadow-black/5"
-                        >
-                           <Terminal className="mr-3 w-5 h-5" /> Launch Playground
-                        </Button>
-                        <Button 
-                            onClick={() => navigate('/projects')} 
-                            variant="secondary"
-                            size="lg"
-                            className="h-14 rounded-2xl text-sm font-bold border-[#eeeeee] hover:bg-zinc-50"
-                        >
-                           <LayoutDashboard className="mr-3 w-5 h-5" /> View Projects
-                        </Button>
-                     </div>
+         {/* Onboarding Section */}
+         <section className="max-w-5xl mx-auto px-8 py-44">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+               {/* Stepper Side */}
+               <div className="space-y-12">
+                  <div className="space-y-4">
+                     <h2 className="text-3xl font-black tracking-tight">Onboarding Guide</h2>
+                     <p className="th-text-tertiary font-medium text-sm">Follow these steps to initialize your agent workspace and start building.</p>
                   </div>
-                )}
-             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Recent Activity Table */}
-      <section className="max-w-5xl mx-auto px-8 py-24">
-        <div className="space-y-8">
-           <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                 <h2 className="text-2xl font-black tracking-tight">Recent Activity</h2>
-                 <p className="text-zinc-400 text-xs font-medium">Track your active on-chain automations and agents.</p>
-              </div>
-              <button className="text-xs font-bold text-zinc-400 hover:text-black transition-colors flex items-center gap-2">
-                 View all <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-           </div>
-
-           <div className="bg-white border border-[#eeeeee] rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
-                 <thead>
-                    <tr className="bg-zinc-50 border-b border-[#eeeeee]">
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">ID</th>
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Automation Task</th>
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Chain</th>
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Last Modified</th>
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Status</th>
-                       <th className="px-6 py-4 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Action</th>
-                    </tr>
-                 </thead>
-                 <tbody className="divide-y divide-[#f5f5f5]">
-                    {RECENT_TASKS.map((task) => (
-                       <tr key={task.id} className="hover:bg-zinc-50/50 transition-colors group">
-                          <td className="px-6 py-5 text-xs font-bold text-zinc-400 font-mono">{task.id}</td>
-                          <td className="px-6 py-5 text-sm font-bold text-black">{task.name}</td>
-                          <td className="px-6 py-5">
-                             <span className="px-2 py-1 rounded bg-zinc-100 text-zinc-500 text-[10px] font-bold border border-zinc-200 uppercase tracking-tight">{task.chain}</span>
-                          </td>
-                          <td className="px-6 py-5 text-xs font-medium text-zinc-400 flex items-center gap-2">
-                             <Clock className="w-3.5 h-3.5" /> {task.modified}
-                          </td>
-                          <td className="px-6 py-5">
-                             <div className={cn(
-                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border",
-                                task.status === 'Running' ? "bg-emerald-50 text-emerald-600 border-emerald-100" :
-                                task.status === 'Complete' ? "bg-zinc-50 text-zinc-600 border-zinc-100" :
-                                "bg-amber-50 text-amber-600 border-amber-100"
-                             )}>
-                                <div className={cn("w-1.5 h-1.5 rounded-full", task.status === 'Running' ? "bg-emerald-500" : task.status === 'Complete' ? "bg-zinc-400" : "bg-amber-500")} />
-                                {task.status}
-                             </div>
-                          </td>
-                          <td className="px-6 py-5">
-                             <button 
-                                onClick={() => navigate('/playground')}
-                                className="p-2 text-zinc-400 hover:text-black opacity-0 group-hover:opacity-100 transition-all active:scale-95"
-                                title="Open in Playground"
-                             >
-                                <PlayCircle className="w-5 h-5" />
-                             </button>
-                          </td>
-                       </tr>
-                    ))}
-                 </tbody>
-              </table>
-           </div>
-        </div>
-      </section>
-
-      {/* Minimal Footer */}
-      <footer className="border-t border-[#eeeeee] py-12 px-8">
-         <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 text-zinc-400 text-xs font-medium">
-            <div className="flex items-center gap-6">
-               <span className="text-black font-bold">© 2026 Aegis Node Clusters</span>
-               <a href="#" className="hover:text-black transition-colors">Documentation</a>
-               <a href="#" className="hover:text-black transition-colors">API Reference</a>
-               <a href="#" className="hover:text-black transition-colors">GitHub</a>
-            </div>
-            <div className="flex items-center gap-4">
-               <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  System Operational
+                  <div className="space-y-8">
+                     {steps.map((step) => (
+                        <div key={step.number} className={cn(
+                           "flex items-start gap-5 transition-opacity",
+                           currentStep < step.number && "opacity-30"
+                        )}>
+                           <div className={cn(
+                              "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border transition-all",
+                              currentStep === step.number ? "bg-blue-950 text-white border-blue-950 shadow-lg scale-110" : "th-surface th-text-tertiary border-[var(--th-border-strong)]"
+                           )}>
+                              {currentStep > step.number ? <CheckCircle2 className="w-6 h-6 th-text" /> : `0${step.number}`}
+                           </div>
+                           <div className="space-y-1 pt-1">
+                              <h3 className="font-bold text-sm tracking-tight">{step.title}</h3>
+                              <p className="text-[11px] th-text-tertiary font-medium leading-relaxed">{step.description}</p>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
                </div>
-               <div className="w-px h-3 bg-zinc-200 hidden md:block" />
-               <span>Latency: 12ms</span>
+
+               {/* Interaction Card Side */}
+               <div className="flex justify-center lg:justify-end">
+                  <div className="w-full max-w-[420px]">
+                     {currentStep === 1 && <ConnectWalletCard />}
+                     {currentStep === 2 && <CreateAgentWalletPanel />}
+                     {currentStep === 3 && <FundAgentWalletPanel />}
+
+                     {currentStep === 4 && (
+                        <div className="p-8 th-surface border border-[var(--th-border-strong)] rounded-2xl shadow-sm text-center space-y-8 min-h-[380px] flex flex-col justify-center transition-all hover:border-[var(--th-text-tertiary)]">
+                           <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto shadow-sm border border-emerald-100 dark:border-emerald-500/20">
+                              <ShieldCheck className="w-8 h-8" />
+                           </div>
+                           <div className="space-y-3">
+                              <h2 className="text-2xl font-bold uppercase">Agent Wallet Initialized</h2>
+                              <p className="text-[12px] th-text-tertiary tracking-widest leading-relaxed max-w-[240px] mx-auto"><i>Your on-chain wallet is persistent and ready for deployment.</i></p>
+                           </div>
+                           <div className="flex flex-col gap-2.5 max-w-[240px] mx-auto pt-2">
+                              <Button
+                                 onClick={() => navigate('/playground')}
+                                 size="lg"
+                                 className="bg-blue-950 hover:bg-blue-900 h-11 rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg shadow-blue-950/10 flex items-center justify-center gap-2"
+                              >
+                                 <Terminal className="w-3.5 h-3.5" /> Launch Playground
+                              </Button>
+                              <Button
+                                 onClick={() => navigate('/projects')}
+                                 variant="outline"
+                                 size="lg"
+                                 className="h-11 rounded-xl text-[10px] font-bold uppercase tracking-widest border-[var(--th-border-strong)] flex items-center justify-center gap-2"
+                              >
+                                 <LayoutDashboard className="w-3.5 h-3.5" /> View Projects
+                              </Button>
+                           </div>
+                        </div>
+                     )}
+                  </div>
+               </div>
             </div>
-         </div>
-      </footer>
-    </div>
-  );
+         </section>
+
+         {/* Recent Activity Table */}
+         <section className="max-w-5xl mx-auto px-8 py-24">
+            <div className="space-y-8">
+               <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                     <h2 className="text-2xl font-black tracking-tight">Recent Activity</h2>
+                     <p className="th-text-tertiary text-xs font-medium">Track your active on-chain automations and agents.</p>
+                  </div>
+                  <button 
+                    onClick={() => navigate('/projects')}
+                    className="text-xs font-bold th-text-tertiary hover:th-text transition-colors flex items-center gap-2"
+                  >
+                     View all <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+               </div>
+
+               <div className="th-surface border border-[var(--th-border-strong)] rounded-2xl overflow-hidden shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                     <thead>
+                        <tr className="th-surface-elevated border-b border-[var(--th-border-strong)]">
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider">ID</th>
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider">Automation Task</th>
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider">Chain</th>
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider">Last Modified</th>
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider">Status</th>
+                           <th className="px-6 py-4 text-[10px] font-bold th-text-tertiary uppercase tracking-wider text-right"></th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-[var(--th-border)]">
+                         {recentProjects.length === 0 ? (
+                            <tr>
+                               <td colSpan={6} className="px-10 py-12 text-center th-text-tertiary font-medium th-surface-low">
+                                   No projects or automations found
+                               </td>
+                            </tr>
+                         ) : (
+                            recentProjects.map((p) => (
+                               <tr key={p.id} className="hover:th-surface-hover transition-colors group">
+                                  <td className="px-6 py-3 text-xs font-bold th-text-tertiary font-mono">#{p.id.slice(0, 4).toUpperCase()}</td>
+                                  <td className="px-6 py-3">
+                                     <div className="flex flex-col">
+                                        <span className="th-text-secondary text-[11px] font-bold uppercase tracking-tight">{p.name}</span>
+                                        <span className="text-[10px] font-bold th-text-tertiary tracking-widest mt-0.5">{p.prompt?.slice(0, 30)+ '...' || 'Operational Project'}</span>
+                                     </div>
+                                  </td>
+                                  <td className="px-6 py-3">
+                                     <span className="px-2 py-1 rounded th-surface-elevated th-text-secondary text-[10px] font-bold border border-[var(--th-border-strong)] uppercase tracking-tight">
+                                        {p.chain || 'MON'}
+                                     </span>
+                                  </td>
+                                  <td className="px-6 py-4 text-xs font-medium th-text-tertiary flex items-center gap-2">
+                                     <Clock className="w-3.5 h-3.5" /> {new Date(p.lastUpdated).toLocaleDateString()}
+                                  </td>
+                                  <td className="px-6 py-3">
+                                     {(() => {
+                                        const s = getStatusDisplay(p);
+                                        return (
+                                           <div className={cn(
+                                              "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all",
+                                              s === 'active' ? "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20" :
+                                              s === 'paused' ? "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20" :
+                                              (s === 'error' || s === 'failed') ? "bg-red-50 text-red-600 border-red-100 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20" :
+                                              "th-surface-elevated th-text-secondary border-[var(--th-border-strong)]"
+                                           )}>
+                                              <div className={cn(
+                                                 "w-1.5 h-1.5 rounded-full",
+                                                 s === 'active' ? "bg-emerald-500 animate-pulse" :
+                                                 s === 'paused' ? "bg-amber-500" :
+                                                 (s === 'error' || s === 'failed') ? "bg-red-500" :
+                                                 "bg-zinc-300 dark:bg-zinc-600"
+                                              )} />
+                                              {s.toUpperCase()}
+                                           </div>
+                                        );
+                                     })()}
+                                  </td>
+                                  <td className="px-6 py-5">
+                                     <button
+                                        onClick={() => navigate(`/playground/${p.id}`)}
+                                        className="p-2 th-text-tertiary hover:th-text"
+                                        title="Open in Playground"
+                                     >
+                                        <ArrowRight className="w-5 h-5" />
+                                     </button>
+                                  </td>
+                               </tr>
+                            ))
+                         )}
+                      </tbody>
+                  </table>
+               </div>
+            </div>
+         </section>
+
+         {/* Minimal Footer */}
+         <footer className="border-t border-[var(--th-border-strong)] py-12 px-8">
+            <div className="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6 th-text-tertiary text-xs font-medium">
+               <div className="flex items-center gap-6">
+                  <span className="th-text font-bold">© 2026 AEGIS</span>
+                  <a href="documentation" className="hover:th-text transition-colors">Documentation</a>
+                  <a href="https://openrouter.ai/docs/guides/overview/models" className="hover:th-text transition-colors">API Reference</a>
+                  <a href="https://github.com/" className="hover:th-text transition-colors">GitHub</a>
+               </div>
+               <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                     System Operational
+                  </div>
+                  <div className="w-px h-3 bg-[var(--th-border-strong)] hidden md:block" />
+                  <span>Latency: 12ms</span>
+               </div>
+            </div>
+         </footer>
+      </div>
+   );
 }
 

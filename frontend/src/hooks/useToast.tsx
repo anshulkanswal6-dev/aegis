@@ -41,17 +41,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             className={cn(
-              "pointer-events-auto w-full glass-card p-4 flex items-start gap-4 animate-in slide-in-from-right-full duration-500 shadow-2xl border",
-              t.type === 'success' && "border-emerald-500/20 bg-emerald-500/[0.02]",
-              t.type === 'error' && "border-rose-500/20 bg-rose-500/[0.02]",
-              t.type === 'info' && "border-blue-500/20 bg-blue-500/[0.02]"
+              "pointer-events-auto w-full glass shadow-2xl border p-4 flex items-start gap-4 animate-in slide-in-from-right-full duration-500",
+              t.type === 'success' && "border-emerald-500/20 bg-emerald-500/[0.05]",
+              t.type === 'error' && "border-rose-500/20 bg-rose-500/[0.05]",
+              t.type === 'info' && "border-blue-500/20 bg-blue-500/[0.05]"
             )}
           >
             <div className={cn(
               "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center border",
-              t.type === 'success' && "bg-emerald-500/10 border-emerald-500/20 text-emerald-500",
-              t.type === 'error' && "bg-rose-500/10 border-rose-500/20 text-rose-500",
-              t.type === 'info' && "bg-blue-500/10 border-blue-500/20 text-blue-500"
+              t.type === 'success' && "bg-emerald-50 text-emerald-500 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+              t.type === 'error' && "bg-rose-50 text-rose-500 border-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20",
+              t.type === 'info' && "bg-blue-50 text-blue-500 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20"
             )}>
               {t.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
               {t.type === 'error' && <AlertCircle className="w-5 h-5" />}
@@ -59,13 +59,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             </div>
             
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-sm tracking-tight">{t.title}</p>
-              <p className="text-xs text-zinc-500 font-medium leading-relaxed mt-0.5">{t.message}</p>
+              <p className="font-bold text-sm tracking-tight th-text">{t.title}</p>
+              <p className="text-xs th-text-tertiary font-medium leading-relaxed mt-0.5">{t.message}</p>
             </div>
 
             <button
               onClick={() => removeToast(t.id)}
-              className="p-1 hover:bg-black/5 rounded-md transition-colors text-zinc-400 hover:text-black"
+              className="p-1 hover:th-surface-hover rounded-md transition-colors th-text-tertiary hover:th-text"
             >
               <X className="w-4 h-4" />
             </button>

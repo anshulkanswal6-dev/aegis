@@ -63,64 +63,127 @@ def deploy_automation(
     wallet_address: str = "",
     description: str = "",
     files: Optional[Dict[str, str]] = None,
+    automation_id: Optional[str] = None,
+    project_id: Optional[str] = None  # Explicit project from frontend
 ) -> AutomationRecord:
     """
     Deploy an automation into the runtime store.
     Returns the created AutomationRecord.
+    
+    Priority for project resolution:
+    1. Explicit project_id from frontend (always wins)
+    2. session_id-based lookup (legacy fallback)
     """
     store = get_store()
     
-    # Optional: Check if session already exists in store and update it
-    # This prevents duplicate active registrations for the same session
+    # Supabase Integration: Ensure Profile exists
+    # Ensure we have a valid UUID for user_id to avoid Supabase crashes
+    # 00000000-0000-0000-0000-000000000000 is used as the 'system' or 'anonymous' user
+    user_id = "00000000-0000-0000-0000-000000000000"
+    if wallet_address:
+         user_id = store.ensure_profile(wallet_address)
+    elif not user_id:
+         # Fallback for stores that don't support profiles but need a string
+         user_id = "default_user"
+    
+    # Final UUID safety for Supabase
+    if not wallet_address and os.getenv("STORE_BACKEND") == "supabase":
+         user_id = "00000000-0000-0000-0000-000000000000"
+    
+    # --- Project Resolution ---
+    # Priority: explicit project_id > session_id fallback
+    resolved_project_id = None
+    
+    # Clean incoming IDs
+    def is_valid_uuid(val):
+        if not val or val == "undefined": return False
+        try:
+            import uuid
+            uuid.UUID(str(val))
+            return True
+        except: return False
+
+    clean_project_id = project_id if is_valid_uuid(project_id) else None
+    clean_session_id = session_id if is_valid_uuid(session_id) else None
+
+    # Resolve Project
+    resolved_project_id = store.get_or_create_project(
+        name=name, 
+        user_id=user_id, 
+        wallet_address=wallet_address, 
+        project_id=clean_project_id or clean_session_id
+    )
+    print(f"[AEGIS Deployment] Project resolved to: {resolved_project_id}")
+
+    # --- Automation Resolution ---
     existing = None
-    if session_id:
-        all_records = store.list_automations()
-        for r in all_records:
-            if r.session_id == session_id:
-                existing = r
-                break
+    clean_auto_id = automation_id if is_valid_uuid(automation_id) else None
+    
+    if clean_auto_id:
+        existing = store.get_automation(clean_auto_id)
+    
+    if not existing and resolved_project_id:
+        # Look for any automation belonging to this project
+        project_records = store.list_automations(project_id=resolved_project_id)
+        if project_records:
+            existing = project_records[0]
+    
+    # Use existing ID or generate fresh
+    final_automation_id = existing.id if existing else (clean_auto_id or str(uuid.uuid4()))
     
     # Calculate next_run_at based on trigger type
     interval_seconds = _get_interval_from_spec(spec_json)
     next_run = datetime.now(timezone.utc) + timedelta(seconds=interval_seconds)
 
     if existing:
-        automation_id = existing.id
+        automation_id = final_automation_id
         print(f"[AEGIS Deployment] Updating existing automation: {automation_id}")
-        record = store.update_automation(automation_id, {
+        updates = {
             "name": name,
             "description": description,
+            "project_id": resolved_project_id,
+            "user_id": user_id, 
             "wallet_address": wallet_address,
             "spec_json": spec_json,
             "status": "active",
             "next_run_at": next_run.isoformat(),
             "files": files or {},
             "updated_at": datetime.now(timezone.utc).isoformat()
-        })
-        if not record:
-             raise Exception(f"Failed to update existing record {automation_id}")
+        }
+        record = store.update_automation(automation_id, updates)
     else:
-        automation_id = str(uuid.uuid4())
+        automation_id = final_automation_id
+        print(f"[AEGIS Deployment] Creating NEW automation: {automation_id} under project {resolved_project_id}")
         record = AutomationRecord(
             id=automation_id,
             name=name,
+            project_id=resolved_project_id,
             description=description,
-            session_id=session_id,
+            session_id=session_id or str(uuid.uuid4()),
             wallet_address=wallet_address,
             spec_json=spec_json,
-            status="active", # Explicitly set to active upon deployment
+            status="active",
             next_run_at=next_run.isoformat(),
             files=files or {},
         )
+        record.user_id = user_id
         store.save_automation(record)
+
+    # Re-link versioning if files present
+    if files:
+        version_id = store.create_version(automation_id, files)
+        store.update_automation(automation_id, {"current_version_id": version_id})
+
+    # Update heartbeat
+    store.update_heartbeat(automation_id)
 
     # Specific Deployment Log
     log_service.log_info(
         automation_id, "deployed",
         f"Automation '{name}' deployed and activated.",
-        {"trigger_type": _get_trigger_type(spec_json), "interval_seconds": interval_seconds}
+        {"trigger_type": _get_trigger_type(spec_json), "interval_seconds": interval_seconds, "project_id": resolved_project_id}
     )
-    print(f"[AEGIS Deployment] Automation {automation_id} is now ACTIVE.")
+    print(f"[AEGIS Deployment] Automation {automation_id} is now ACTIVE (project={resolved_project_id}).")
 
     return record
 
@@ -187,14 +250,8 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
     if trigger_type in wallet_sensitive_triggers and not wallet_address:
         log_service.log_error(automation_id, "context_error", "wallet_address missing from deployed automation spec during trigger evaluation")
 
-    # Debug Logging
-    print(f"[AEGIS DEBUG] evaluating {trigger_type} for wallet {wallet_address or 'N/A'} on {chain or 'N/A'}")
-    log_service.log_debug(automation_id, "trigger_check", "automation checked condition", {
-        "trigger_type": trigger_type,
-        "wallet": wallet_address,
-        "chain": chain,
-        "rpc": rpc_url
-    })
+    # Clean status log for the UI
+    log_service.log_info(automation_id, "trigger_check", f"Checking condition: {trigger_type}")
 
     try:
         triggered = _trigger_engine.evaluate(trigger_type, trigger_params, ctx)
@@ -205,17 +262,20 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
             "last_error": str(e),
         })
         return {"triggered": False, "error": str(e)}
-
+    
     now_iso = datetime.now(timezone.utc).isoformat()
 
     if triggered:
         log_service.log_info(automation_id, "trigger_matched", "automation live")
 
+        # Supabase: Create a Run entry
+        run_id = store.create_run(automation_id, record.current_version_id, trigger_payload=trigger_params)
+
         # Execute actions
         def _log_fn(event: str, message: str, details: Optional[Dict] = None):
             log_service.log_info(automation_id, event, message, details)
 
-        result = execution_service.execute_actions(spec, _log_fn, automation_id=automation_id)
+        result = execution_service.execute_actions(spec, _log_fn, automation_id=automation_id, owner_id=record.user_id, project_name=record.name)
 
         # Calculate next_run_at
         interval_seconds = _get_interval_from_spec(spec)
@@ -226,6 +286,16 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
             "next_run_at": next_run.isoformat(),
             "run_count": record.run_count + 1,
         }
+
+        # Supabase: Update the Run
+        store.update_run(run_id, {
+            "status": "success" if result["success"] else "failed",
+            "result": result,
+            "error_message": str(result.get("errors", "")) if not result["success"] else None
+        })
+
+        # Update heartbeat
+        store.update_heartbeat(automation_id)
 
         # Auto-complete for run_once triggers
         if trigger_type == "run_once_at_datetime":
@@ -239,10 +309,11 @@ def evaluate_automation(automation_id: str) -> Dict[str, Any]:
         store.update_automation(automation_id, update_fields)
         return {"triggered": True, "result": result}
     else:
-        # Not triggered — still update next_run_at
+        # Not triggered — still update next_run_at and heartbeat
         interval_seconds = _get_interval_from_spec(spec)
         next_run = datetime.now(timezone.utc) + timedelta(seconds=interval_seconds)
         store.update_automation(automation_id, {"next_run_at": next_run.isoformat()})
+        store.update_heartbeat(automation_id)
         return {"triggered": False}
 
 
@@ -256,10 +327,10 @@ def get_active_automations() -> List[AutomationRecord]:
     return store.list_automations(status="active")
 
 
-def get_all_automations(status: Optional[str] = None) -> List[AutomationRecord]:
-    """Return all automations, optionally filtered by status."""
+def get_all_automations(status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
+    """Return all automations, optionally filtered by status or project."""
     store = get_store()
-    return store.list_automations(status=status)
+    return store.list_automations(status=status, project_id=project_id)
 
 
 def pause_automation(automation_id: str) -> Optional[AutomationRecord]:
@@ -285,6 +356,12 @@ def delete_automation(automation_id: str) -> bool:
     store = get_store()
     log_service.log_info(automation_id, "deleted", "Automation deleted by user")
     return store.delete_automation(automation_id)
+
+
+def delete_project(project_id: str) -> bool:
+    """Delete a project from the store."""
+    store = get_store()
+    return store.delete_project(project_id)
 
 
 def get_automation_detail(automation_id: str) -> Optional[Dict[str, Any]]:
@@ -327,7 +404,12 @@ def _get_interval_from_spec(spec: Dict[str, Any]) -> int:
     # Check runtime.interval_seconds first
     runtime = spec.get("runtime", {})
     if isinstance(runtime, dict) and "interval_seconds" in runtime:
-        return int(runtime["interval_seconds"])
+        val = runtime["interval_seconds"]
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            # Fallback to string-based parsing if it's "30s"
+            return parse_interval_to_seconds(str(val))
 
     # Check trigger params for interval
     trigger_params = _get_trigger_params(spec)

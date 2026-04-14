@@ -16,6 +16,7 @@ import runtime_service
 import log_service
 from worker import get_worker
 from config import WORKER_AUTOSTART
+from integrations.telegram.poller import start_telegram_poller, stop_telegram_poller
 
 
 import os
@@ -33,6 +34,8 @@ class DeployRequest(BaseModel):
     name: str
     description: str = ""
     session_id: str = ""
+    automation_id: Optional[str] = None # Added to prevent duplicates
+    project_id: Optional[str] = None    # Explicit project linkage from frontend
     wallet_address: Optional[str] = None # Added for Supabase identity
     spec_json: Dict[str, Any]
     files: Dict[str, str] = Field(default_factory=dict)
@@ -53,14 +56,16 @@ async def startup_worker():
     if WORKER_AUTOSTART:
         worker = get_worker()
         worker.start()
-        print("[AEGIS API] Worker auto-started.")
+        start_telegram_poller()
+        print("[AEGIS API] Worker and Telegram Poller started.")
 
 
 async def shutdown_worker():
     """Called on FastAPI shutdown to stop the worker."""
     worker = get_worker()
     worker.stop()
-    print("[AEGIS API] Worker stopped.")
+    stop_telegram_poller()
+    print("[AEGIS API] Worker and Telegram Poller shut down.")
 
 
 # =========================================================
@@ -70,9 +75,11 @@ async def shutdown_worker():
 def _normalize_spec_json(spec: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize spec_json: fix chain/rpc and clean action params before deploy."""
     chain_info = spec.get("chain", {})
+    trigger = spec.get("trigger", {})
     trigger_params = {}
-    if isinstance(spec.get("trigger"), dict):
-        trigger_params = spec["trigger"].get("params", {})
+    
+    if isinstance(trigger, dict):
+        trigger_params = trigger.get("params", {})
     
     # Detect Monad Testnet from token/asset mentions
     token = str(trigger_params.get("token", "")).lower()
@@ -80,42 +87,50 @@ def _normalize_spec_json(spec: Dict[str, Any]) -> Dict[str, Any]:
     chain_name = str(chain_info.get("name", "")).lower()
     rpc = str(chain_info.get("rpc", ""))
     
-    needs_monad = (
-        token in ["mon", "monad"] or
-        asset in ["mon", "monad"] or
-        chain_name == "unknown" or
-        not rpc
-    )
-    
-    if needs_monad:
+    if any(x in ["mon", "monad"] for x in [token, asset]) or chain_name == "unknown" or not rpc:
         spec["chain"] = {
             "name": "Monad Testnet",
             "rpc": "https://testnet-rpc.monad.xyz"
         }
     
-    # Clean action params: only keep relevant fields per action type
+    # Clean action params
     CLEAN_PARAMS = {
         "send_native_token": ["recipient_address", "amount"],
-        "send_email_notification": ["to", "subject", "message"],
+        "send_erc20": ["token_address", "recipient_address", "amount"],
+        "swap": ["from_token", "to_token", "amount", "router_address"],
     }
     
     actions = spec.get("actions", [])
-    for action in actions:
-        if not isinstance(action, dict):
-            continue
-        atype = action.get("type", "")
-        if atype in CLEAN_PARAMS:
-            raw_params = action.get("params", {})
-            clean = {k: raw_params[k] for k in CLEAN_PARAMS[atype] if k in raw_params}
-            action["params"] = clean
-        # Remove TODO integration stubs
-        action.pop("integration", None)
+    if isinstance(actions, list):
+        for action in actions:
+            if isinstance(action, dict):
+                atype = action.get("type", "")
+                if atype in CLEAN_PARAMS:
+                    raw_params = action.get("params", {})
+                    action["params"] = {k: raw_params[k] for k in CLEAN_PARAMS[atype] if k in raw_params}
+                action.pop("integration", None)
     
-    # Clean trigger params: only keep trigger-relevant fields
-    TRIGGER_FIELDS = ["date", "time", "timezone", "wallet_address", "token", "asset", "threshold"]
-    if trigger_params:
-        clean_trigger = {k: trigger_params[k] for k in TRIGGER_FIELDS if k in trigger_params}
-        spec["trigger"]["params"] = clean_trigger
+    # Clean notification params
+    NOTIF_FIELDS = {
+        "email": ["to", "subject", "body"],
+        "telegram": ["message"]
+    }
+    notification = spec.get("notification")
+    if isinstance(notification, dict):
+        for channel, fields in NOTIF_FIELDS.items():
+            if channel in notification and isinstance(notification[channel], dict):
+                raw = notification[channel]
+                notification[channel] = {k: raw[k] for k in fields if k in raw}
+
+    # Clean trigger params: be inclusive to support balance monitoring and complex conditions
+    TRIGGER_FIELDS = [
+        "date", "time", "timezone", "wallet_address", "token", "asset", "threshold", 
+        "target_balance", "chain", "network", "symbol", "operator", "value"
+    ]
+    if isinstance(trigger, dict) and "params" in trigger:
+        raw_tp = trigger["params"]
+        # Filter to known good, but also preserve anything that looks like a valid variable
+        trigger["params"] = {k: raw_tp[k] for k in raw_tp if k in TRIGGER_FIELDS or not k.startswith("_")}
     
     return spec
 
@@ -124,6 +139,10 @@ def _normalize_spec_json(spec: Dict[str, Any]) -> Dict[str, Any]:
 async def deploy_automation(req: DeployRequest):
     """Deploy a new automation into the local runtime."""
     try:
+        # Normalize incoming IDs: convert 'undefined' or '' to None
+        proj_id = req.project_id if req.project_id and req.project_id != "undefined" else None
+        auto_id = req.automation_id if req.automation_id and req.automation_id != "undefined" else None
+
         # Normalize spec before storing
         normalized_spec = _normalize_spec_json(req.spec_json)
         
@@ -131,9 +150,11 @@ async def deploy_automation(req: DeployRequest):
             name=req.name,
             spec_json=normalized_spec,
             session_id=req.session_id,
-            wallet_address=req.wallet_address,
+            automation_id=auto_id,
+            project_id=proj_id,
+            wallet_address=req.wallet_address or "",
             description=req.description,
-            files=req.files,
+            files=req.files
         )
 
         # Schedule it in the worker
@@ -150,13 +171,16 @@ async def deploy_automation(req: DeployRequest):
             "automation": record.to_dict(),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_msg = f"Deployment Exception: {str(e)}\n{traceback.format_exc()}"
+        print(f"[AEGIS Deployment ERROR] {error_msg}")
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @router.get("/")
-async def list_automations(status: Optional[str] = None):
-    """List all automations, optionally filtered by status."""
-    automations = runtime_service.get_all_automations(status=status)
+async def list_automations(status: Optional[str] = None, project_id: Optional[str] = None):
+    """List all automations, optionally filtered by status or project."""
+    automations = runtime_service.get_all_automations(status=status, project_id=project_id)
     return {
         "automations": [a.to_dict() for a in automations],
         "total": len(automations),
@@ -284,3 +308,24 @@ async def clear_terminal_logs(session_id: str):
     """Clear terminal logs for a session."""
     count = log_service.clear_terminal_logs(session_id)
     return {"success": True, "count": count}
+
+
+@router.get("/session/{session_id}")
+async def get_session(session_id: str):
+    """Get the persistent agent session state (for workspace restoration)."""
+    import agent
+    state = agent.get_session_state(session_id)
+    if not state:
+        return {"success": False, "message": "Session not found"}
+    return {
+        "success": True,
+        "session": {
+           "id": state.get("id"),
+           "stage": state.get("stage"),
+           "files": state.get("files", {}),
+           "plan_md": state.get("plan_md", ""),
+           "known_fields": state.get("known_fields", {}),
+           "selected_trigger": state.get("selected_trigger"),
+           "selected_actions": state.get("selected_actions", [])
+        }
+    }

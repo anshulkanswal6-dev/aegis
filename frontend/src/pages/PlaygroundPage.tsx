@@ -1,7 +1,6 @@
 
 import { 
   Code2, FileJson, 
-  Cpu, Network,
   Layout,
   Activity,
   Terminal as TerminalIcon,
@@ -14,7 +13,10 @@ import {
   PanelLeft,
   PanelRight,
   Monitor,
-  Sparkles
+  Sparkles,
+  Copy,
+  Check,
+  Network
 } from 'lucide-react';
 import { cn } from '../lib/utils/cn';
 import { usePlaygroundStore } from '../store/playgroundStore';
@@ -22,21 +24,35 @@ import { WorkspaceSidebar } from '../components/playground/WorkspaceSidebar';
 import { AgentChatPanel } from '../components/playground/AgentChatPanel';
 import { TerminalPanel } from '../components/playground/TerminalPanel';
 import { IDEEditor } from '../components/playground/IDEEditor';
+import { WelcomeScreen } from '../components/playground/WelcomeScreen';
+import { ThemeToggle } from '../components/ui/UIPack';
 import { useState, useEffect } from 'react';
 import { useAccount, useChainId, useConfig } from 'wagmi';
 import { agentService } from '../services/agentService';
 import { formatEther } from 'viem';
 import { useLayoutStore } from '../store/layoutStore';
 import { useAgentWallet } from '../hooks/useAgentWallet';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import logoPng from '../assets/Copy of AEGIS (640 x 640 px) (1).png';
 
 export default function PlaygroundPage() {
   const { address } = useAccount();
   const chainId = useChainId();
   const config = useConfig();
   const location = useLocation();
+  const { projectId } = useParams();
+  const navigate = useNavigate();
   const currentChain = config.chains.find(c => c.id === chainId);
   const [showProfile, setShowProfile] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!address) return;
+    navigator.clipboard.writeText(address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   
   const { 
     ethBalance: agentBalance,
@@ -59,12 +75,15 @@ export default function PlaygroundPage() {
     customFiles,
     activeView, setActiveView,
     automationLogs,
-    activeAutomationId,
-    deployAutomation,
-    submitPrompt,
     loadAutomation,
     setWalletAddress,
-    sessionId, pollTerminalLogs
+    setProjectContext,
+    activeProjectId,
+    intentSummary,
+    sessionId, pollTerminalLogs,
+    activeAutomationId,
+    deployAutomation,
+    submitPrompt
   } = usePlaygroundStore();
 
   // Sync wallet address with store
@@ -93,38 +112,46 @@ export default function PlaygroundPage() {
       loadAutomation(location.state.automation);
       // Clear state to prevent re-load on refresh
       window.history.replaceState({}, document.title);
+      return;
     }
-  }, [location.state, loadAutomation]);
+
+    // If we have a projectId in URL but no activeProjectId in store, or they don't match
+    if (projectId && projectId !== activeProjectId) {
+      const fetchProject = async () => {
+        const { data: project, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('id', projectId)
+          .single();
+
+        if (error || !project) {
+          console.error('Project not found:', error);
+          navigate('/projects');
+          return;
+        }
+
+        setProjectContext(project.id, project.name, project.description || '');
+      };
+      fetchProject();
+    }
+  }, [projectId, activeProjectId, location.state, loadAutomation, setProjectContext, navigate]);
 
   const [cursorPos, setCursorPos] = useState({ line: 1, column: 1 });
 
   // =========================================================
   // Log Polling Loop
   // =========================================================
+  // Auto-scroll for Main Automation View
   useEffect(() => {
     if (!activeAutomationId) return;
-
-    let pollCount = 0;
-    const interval = setInterval(async () => {
-      try {
-        const data = await agentService.getAutomationLogs(activeAutomationId, 20);
-        if (data && data.logs) {
-           // Format and update logs in store
-           const newLogs = data.logs.map((l: any) => `- ${l.message}`);
-           // Simple diff to only add new ones or replace
-           usePlaygroundStore.setState({ automationLogs: newLogs });
-        }
-      } catch (e) {
-        console.error("Log fetch failed", e);
-      }
-      
-      pollCount++;
-      // Stop polling after 1 hour of activity as safety or if component unmounts
-      if (pollCount > 720) clearInterval(interval); 
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeAutomationId]);
+    const logContainer = document.getElementById('automation-log-container');
+    if (logContainer) {
+       const isAtBottom = logContainer.scrollHeight - logContainer.scrollTop <= logContainer.clientHeight + 120;
+       if (isAtBottom) {
+          logContainer.scrollTop = logContainer.scrollHeight;
+       }
+    }
+  }, [automationLogs, activeAutomationId]);
 
 
   const findNode = (id: string, nodes: any[]): any => {
@@ -146,7 +173,7 @@ export default function PlaygroundPage() {
     if (name.endsWith('.py')) return <FileCode className="w-3.5 h-3.5 text-blue-500" />;
     if (name.endsWith('.json')) return <FileJson className="w-3.5 h-3.5 text-amber-500" />;
     if (name.endsWith('.md')) return <FileSearch className="w-3.5 h-3.5 text-rose-500" />;
-    return <Code2 className="w-3.5 h-3.5 text-zinc-400" />;
+    return <Code2 className="w-3.5 h-3.5 th-text-tertiary" />;
   };
 
   const getTabLabel = (id: string) => {
@@ -174,91 +201,100 @@ export default function PlaygroundPage() {
 
 
 
-  const handleDeploy = () => {
-    // If we have a spec, it's a runtime deployment
-    if (spec && spec !== '{}') {
-       deployAutomation();
-    } else if (currentPrompt) {
-       submitPrompt(currentPrompt);
+  const handleDeploy = async () => {
+    // Clear logs locally and on backend for a fresh start
+    if (activeAutomationId) {
+       try {
+          await agentService.clearTerminalLogs(activeAutomationId);
+       } catch (e) {
+          console.warn("Could not clear logs on backend", e);
+       }
+       usePlaygroundStore.setState({ automationLogs: [] });
     }
+    
+    // Rely on the store's unified deploy logic to avoid stale component state
+    deployAutomation();
   };
 
+  // Welcome Screen Logic: If no project is open, show the welcome portal
+  if (!activeProjectId && !activeAutomationId) {
+    return (
+      <div className="flex flex-col h-screen th-bg">
+         <WelcomeScreen />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-white">
-      <header className="h-14 border-b border-[#eeeeee] flex items-center justify-between px-6 shrink-0 bg-white relative z-50">
-        <div className="flex items-center gap-8">
-           <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center text-white shadow-xl rotate-[-4deg]">
-                 <Cpu className="w-4 h-4" />
+    <div className="flex flex-col h-screen th-bg">
+      <header className="h-13 border-b border-[var(--th-border-strong)] flex items-center justify-between px-5 shrink-0 th-surface relative z-50 shadow-sm">
+        <div className="flex items-center gap-6">
+           <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/')}>
+              <div className="w-7 h-7 rounded-lg overflow-hidden border border-[var(--th-border-strong)] bg-blue-950 flex-shrink-0">
+                 <img src={logoPng} alt="AEGIS" className="w-full h-full object-cover" />
               </div>
-              <div className="flex flex-col">
-                 <h1 className="text-[12px] font-black uppercase tracking-[0.25em] text-black italic">Aegis IDE</h1>
-                 <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-emerald-50 rounded-full border border-emerald-100/50 w-fit">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[8px] font-black text-emerald-600 tracking-widest uppercase">Core Sync: Active</span>
-                 </div>
+              <div className="flex flex-col gap-0.5">
+                 <h1 className="text-[10px] font-black uppercase tracking-[0.2em] th-text opacity-90 leading-none group-hover:th-text transition-colors italic">Playground IDE</h1>
+                 {intentSummary && (
+                   <div className="flex items-center gap-1.5 opacity-60">
+                      <div className="w-1 h-1 rounded-full bg-blue-500" />
+                      <span className="text-[8px] font-bold th-text-tertiary uppercase tracking-widest truncate max-w-[180px]">{intentSummary}</span>
+                   </div>
+                 )}
               </div>
            </div>
-
-           <div className="flex items-center gap-1 px-1 py-1 bg-[#F5F5F5] rounded-xl border border-[#eeeeee]">
-              <button 
+           
+           <div className="flex items-center gap-1 p-1 th-surface-elevated rounded-xl border border-[var(--th-border-strong)] shadow-inner">
+               <button 
                 onClick={() => setActiveView('compile')}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                  activeView === 'compile' ? "bg-white text-black shadow-sm border border-[#eeeeee]" : "text-zinc-400 hover:text-black hover:bg-white/50"
+                  "flex items-center gap-2 px-3.5 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all",
+                  activeView === 'compile' ? "th-surface th-text shadow-sm border border-[var(--th-border-strong)]" : "th-text-tertiary hover:th-text"
                 )}
               >
-                 <Sparkles className={cn("w-3.5 h-3.5", activeView === 'compile' ? "text-[#FF4D4D]" : "text-zinc-300")} /> Compile
+                 <Sparkles className={cn("w-3.5 h-3.5", activeView === 'compile' ? "text-[#FF4D4D]" : "th-text-tertiary")} /> Build
               </button>
               <button 
                 onClick={() => setActiveView('simulation')}
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                  activeView === 'simulation' ? "bg-white text-black shadow-sm border border-[#eeeeee]" : "text-zinc-400 hover:text-black hover:bg-white/50"
+                  "flex items-center gap-2 px-3.5 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all",
+                  activeView === 'simulation' ? "th-surface th-text shadow-sm border border-[var(--th-border-strong)]" : "th-text-tertiary hover:th-text"
                 )}
               >
-                 <Layout className={cn("w-3.5 h-3.5", activeView === 'simulation' ? "text-amber-500" : "text-zinc-300")} /> Simulation
-              </button>
-              <button 
-                onClick={() => setActiveView('automation')}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all",
-                  activeView === 'automation' ? "bg-white text-black shadow-sm border border-[#eeeeee]" : "text-zinc-400 hover:text-black hover:bg-white/50"
-                )}
-              >
-                 <Activity className={cn("w-3.5 h-3.5", activeView === 'automation' ? "text-emerald-500" : "text-zinc-300")} /> Automation Logs
+                 <Layout className={cn("w-3.5 h-3.5", activeView === 'simulation' ? "text-amber-500" : "th-text-tertiary")} /> Simulation
               </button>
            </div>
         </div>
 
         <div className="flex items-center gap-4">
-           <div className="flex items-center gap-1 px-1 py-1 bg-[#F5F5F5] rounded-xl border border-[#eeeeee] mr-2">
+           <ThemeToggle />
+           <div className="flex items-center gap-1 px-1 py-1 th-surface-elevated rounded-xl border border-[var(--th-border-strong)] mr-2">
               <button 
                 onClick={toggleSidebar}
-                className={cn("p-2 rounded-lg transition-all", !isSidebarCollapsed ? "bg-white text-black shadow-sm" : "text-zinc-400 hover:text-black")}
+                className={cn("p-2 rounded-lg transition-all", !isSidebarCollapsed ? "th-surface th-text shadow-sm" : "th-text-tertiary hover:th-text")}
                 title="Toggle Sidebar"
               >
                  <PanelLeft className="w-4 h-4" />
               </button>
               <button 
                 onClick={toggleTerminal}
-                className={cn("p-2 rounded-lg transition-all", !isTerminalCollapsed ? "bg-white text-black shadow-sm" : "text-zinc-400 hover:text-black")}
+                className={cn("p-2 rounded-lg transition-all", !isTerminalCollapsed ? "th-surface th-text shadow-sm" : "th-text-tertiary hover:th-text")}
                 title="Toggle Terminal"
               >
                  <Monitor className="w-4 h-4" />
               </button>
               <button 
                 onClick={toggleChat}
-                className={cn("p-2 rounded-lg transition-all", !isChatCollapsed ? "bg-white text-black shadow-sm" : "text-zinc-400 hover:text-black")}
+                className={cn("p-2 rounded-lg transition-all", !isChatCollapsed ? "th-surface th-text shadow-sm" : "th-text-tertiary hover:th-text")}
                 title="Toggle Chat"
               >
                  <PanelRight className="w-4 h-4" />
               </button>
            </div>
 
-           <div className="h-9 px-4 flex items-center gap-2.5 bg-[#F5F5F5] rounded-xl border border-[#eeeeee] group hover:border-zinc-300 transition-all cursor-pointer">
+           <div className="h-9 px-4 flex items-center gap-2.5 th-surface-elevated rounded-xl border border-[var(--th-border-strong)] group hover:border-[var(--th-text-tertiary)] transition-all cursor-pointer">
               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
-              <span className="text-[10px] font-bold text-black tracking-widest uppercase">
+              <span className="text-[10px] font-bold th-text tracking-widest uppercase">
                  {currentChain?.name || 'Avalanche Fuji'}
               </span>
            </div>
@@ -266,44 +302,60 @@ export default function PlaygroundPage() {
            <div className="relative">
               <button 
                 onClick={() => setShowProfile(!showProfile)}
-                className="h-10 flex items-center gap-3 px-1.5 bg-white border border-[#eeeeee] rounded-2xl hover:border-black transition-all group overflow-hidden"
+                className="h-9 flex items-center gap-2.5 px-1.5 th-surface border border-[var(--th-border-strong)] rounded-xl hover:border-blue-500 transition-all group overflow-hidden shadow-sm"
               >
-                 <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-[#FF4D4D] to-rose-600 flex items-center justify-center text-white text-[10px] font-black shadow-lg">
+                 <div className="w-6.5 h-6.5 rounded-lg bg-gradient-to-br from-[#FF4D4D] to-rose-600 flex items-center justify-center text-white text-[9px] font-black shadow-md">
                     {address?.slice(0, 2).toUpperCase() || 'AE'}
                  </div>
                  <div className="flex flex-col items-start pr-2">
-                    <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest leading-none mb-1">Agent Balance</span>
-                    <span className="text-[11px] font-bold text-black tracking-tight leading-none">
-                       {formatEther(agentBalance).slice(0, 6)} {chainSymbol}
+                    <span className="text-[8px] font-black th-text-tertiary uppercase tracking-widest leading-none mb-1">Balance</span>
+                    <span className="text-[10px] font-bold th-text tracking-tight leading-none tabular-nums">
+                       {formatEther(agentBalance).slice(0, 5)} {chainSymbol}
                     </span>
                  </div>
               </button>
 
               {showProfile && (
-                <div className="absolute top-full right-0 mt-2 w-64 bg-white border border-[#eeeeee] rounded-2xl shadow-2xl p-2 z-[100] animate-in slide-in-from-top-2 duration-200">
-                   <div className="p-4 border-b border-[#eeeeee] mb-1">
-                      <p className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">Signed in as</p>
-                      <p className="text-xs font-bold text-black truncate">{address || '0x000...000'}</p>
-                   </div>
-                   <div className="space-y-0.5">
-                      <button className="w-full px-4 py-2 flex items-center gap-3 hover:bg-zinc-50 transition-colors group">
-                         <User className="w-3.5 h-3.5 text-zinc-400 group-hover:text-black" />
-                         <span className="text-xs font-semibold text-zinc-600 group-hover:text-black">Profile Settings</span>
-                      </button>
-                      <button className="w-full px-4 py-3 flex items-center gap-3 hover:bg-rose-50 transition-colors group mt-1">
-                         <LogOut className="w-3.5 h-3.5 text-rose-500" />
-                         <span className="text-xs font-bold text-rose-600">Logout</span>
-                      </button>
-                   </div>
-                </div>
+                <>
+                  <div className="fixed inset-0 z-[-1]" onClick={() => setShowProfile(false)} />
+                  <div className="absolute top-full right-0 mt-2 w-64 th-surface-elevated border border-[var(--th-border-strong)] rounded-2xl shadow-2xl p-2 z-[100] animate-in slide-in-from-top-2 duration-200">
+                    <div className="p-4 border-b border-[var(--th-border-strong)] mb-1">
+                       <p className="text-[10px] font-black th-text-tertiary uppercase tracking-widest mb-1.5">Signed in as</p>
+                       <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-bold th-text truncate font-mono">{address || '0x000...000'}</p>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleCopy(); }}
+                            className="p-1.5 rounded-lg hover:th-surface th-text-tertiary hover:th-text transition-all active:scale-95 border border-transparent hover:border-[var(--th-border-strong)]"
+                            title="Copy address"
+                          >
+                             {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                       </div>
+                    </div>
+                    <div className="space-y-0.5">
+                       <button className="w-full px-4 py-2 flex items-center gap-3 hover:th-surface-hover transition-colors group rounded-xl">
+                          <User className="w-3.5 h-3.5 th-text-tertiary group-hover:th-text" />
+                          <span className="text-xs font-semibold th-text-secondary group-hover:th-text">Profile Settings</span>
+                       </button>
+                       <div className="px-4 py-2 flex items-center justify-between border-t border-[var(--th-border-strong)] mt-1 pt-3">
+                          <span className="text-[10px] font-black th-text-tertiary uppercase tracking-widest">Theme</span>
+                          <ThemeToggle />
+                       </div>
+                       <button className="w-full px-4 py-3 flex items-center gap-3 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors group mt-1 rounded-xl">
+                          <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                          <span className="text-xs font-bold text-rose-600 dark:text-rose-400">Logout</span>
+                       </button>
+                    </div>
+                  </div>
+                </>
               )}
            </div>
            <button 
              onClick={handleDeploy}
-             className="h-9 px-4 flex items-center gap-2 bg-black text-white rounded-full shadow-lg shadow-black/10 hover:bg-zinc-800 hover:scale-[1.02] transition-all group shrink-0"
+             className="h-9 px-4 flex items-center gap-2 bg-blue-950 text-white rounded-xl shadow-lg shadow-blue-950/10 hover:bg-blue-900 active:scale-95 transition-all group shrink-0 border border-blue-900/50"
            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span className="text-[11px] font-black uppercase tracking-wider">Deploy Agent</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+              <span className="text-[10px] font-black uppercase tracking-[0.1em]">Deploy</span>
            </button>
         </div>
       </header>
@@ -311,22 +363,22 @@ export default function PlaygroundPage() {
       <div className="flex-1 flex overflow-hidden">
         {!isSidebarCollapsed && <WorkspaceSidebar />}
 
-        <div className="flex-1 flex overflow-hidden relative border-r border-[#eeeeee]">
-          <div className="flex-1 flex flex-col min-w-0 bg-white relative">
+        <div className="flex-1 flex overflow-hidden relative">
+          <div className="flex-1 flex flex-col min-w-0 th-surface relative">
             <main className="flex-1 flex flex-col relative">
                {activeView === 'compile' && (
-                 <div className="flex-1 flex flex-col h-full overflow-hidden" key="view-compile">
-                    <div className="h-10 flex items-center bg-[#FAF9F8] border-b border-[#eeeeee] px-2 gap-1 overflow-x-auto custom-scrollbar-hide">
+                  <div className="flex-1 flex flex-col h-full overflow-hidden" key="view-compile">
+                    <div className="h-8 flex items-center th-surface-elevated border-b border-[var(--th-border-strong)] px-2 gap-0.5 overflow-x-auto custom-scrollbar-hide">
                         {openFiles.map(fileId => (
                           <div 
                             key={fileId}
                             onClick={() => setActiveTab(fileId)}
                             className={cn(
-                              "px-4 h-full flex items-center gap-2.5 text-[10px] font-black uppercase tracking-[0.15em] cursor-pointer border-r border-[#eeeeee] transition-all relative z-10 group",
-                              activeTab === fileId ? "bg-white text-black" : "text-zinc-400 hover:text-zinc-500 bg-[#FAF9F8]"
+                              "px-3 h-full flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.1em] cursor-pointer border-r border-[var(--th-border-strong)] transition-all relative z-10 group",
+                              activeTab === fileId ? "th-surface th-text" : "th-text-tertiary hover:th-text-secondary th-surface-elevated"
                             )}
                           >
-                             {activeTab === fileId && <div className="absolute top-0 left-0 right-0 h-[2px] bg-[#FF4D4D]" />}
+                             {activeTab === fileId && <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-[#FF4D4D]" />}
                              {getTabIcon(fileId)} 
                              {getTabLabel(fileId)}
                              <X 
@@ -337,7 +389,7 @@ export default function PlaygroundPage() {
                         ))}
                     </div>
 
-                    <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
+                    <div className="flex-1 flex flex-col relative overflow-hidden th-surface min-h-0">
                        {activeTab ? (
                           <IDEEditor 
                              id={findNode(activeTab, fileTree)?.name || activeTab}
@@ -348,9 +400,9 @@ export default function PlaygroundPage() {
                              className="animate-in fade-in duration-300"
                           />
                        ) : (
-                            <div className="flex-1 flex items-center justify-center bg-[#FAF9F8]">
+                            <div className="flex-1 flex items-center justify-center th-surface-elevated">
                                <div className="text-center space-y-4 opacity-20">
-                                  <TerminalIcon className="w-12 h-12 mx-auto text-black" />
+                                  <TerminalIcon className="w-12 h-12 mx-auto th-text" />
                                   <p className="text-[10px] font-black uppercase tracking-[0.3em]">No File Opened Here</p>
                                </div>
                             </div>
@@ -360,18 +412,18 @@ export default function PlaygroundPage() {
                )}
 
                {activeView === 'simulation' && (
-                  <div className="flex-1 relative bg-white overflow-hidden flex items-center justify-center" key="view-simulation" style={{ backgroundImage: 'radial-gradient(circle, #f0f0f0 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
+                  <div className="flex-1 relative th-surface overflow-hidden flex items-center justify-center" key="view-simulation" style={{ backgroundImage: 'radial-gradient(circle, var(--th-border-strong) 1px, transparent 1px)', backgroundSize: '24px 24px' }}>
                      <div className="absolute top-8 left-8 flex flex-col gap-2 scale-in duration-500">
-                        <h2 className="text-[12px] font-black uppercase tracking-widest text-black/40">Neural Simulation Canvas</h2>
-                        <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest bg-zinc-50 px-3 py-1 rounded-full border border-[#eeeeee] w-fit">Live Interaction Sandbox</p>
+                        <h2 className="text-[12px] font-black uppercase tracking-widest th-text opacity-40">Neural Simulation Canvas</h2>
+                        <p className="text-[9px] font-bold th-text-tertiary uppercase tracking-widest th-surface-elevated px-3 py-1 rounded-full border border-[var(--th-border-strong)] w-fit">Live Interaction Sandbox</p>
                      </div>
                      <div className="text-center space-y-6 max-w-md animate-in zoom-in duration-700">
-                        <div className="w-20 h-20 mx-auto bg-black rounded-3xl flex items-center justify-center shadow-2xl rotate-[-6deg] group hover:rotate-0 transition-transform cursor-pointer">
+                        <div className="w-20 h-20 mx-auto bg-blue-950 rounded-3xl flex items-center justify-center shadow-2xl rotate-[-6deg] group hover:rotate-0 transition-transform cursor-pointer">
                            <Layout className="w-10 h-10 text-white" />
                         </div>
                         <div className="space-y-2">
-                           <h3 className="text-lg font-black tracking-tighter text-black uppercase">Simulation Mode Active</h3>
-                           <p className="text-[11px] font-medium text-zinc-500 leading-relaxed max-w-[280px] mx-auto italic">
+                           <h3 className="text-lg font-black tracking-tighter th-text uppercase">Simulation Mode Active</h3>
+                           <p className="text-[11px] font-medium th-text-secondary leading-relaxed max-w-[280px] mx-auto italic">
                               Your agent's behavioral logic will manifest here as a functional preview.
                            </p>
                         </div>
@@ -379,48 +431,30 @@ export default function PlaygroundPage() {
                   </div>
                )}
 
-               {activeView === 'automation' && (
-                  <div className="flex-1 flex flex-col bg-white" key="view-automation">
-                     <div className="h-14 px-8 border-b border-[#eeeeee] flex items-center justify-between bg-[#FAF9F8]">
-                        <div className="flex items-center gap-3">
-                           <Activity className="w-4 h-4 text-emerald-500" />
-                           <h2 className="text-[11px] font-black uppercase tracking-widest text-black">Aegis Automation Stream</h2>
-                        </div>
-                     </div>
-                     <div className="flex-1 overflow-y-auto p-8 space-y-2 font-mono text-[11px] bg-[#0A0A0A] text-zinc-400">
-                        {automationLogs.map((log, idx) => (
-                           <div key={idx} className="flex gap-4">
-                              <span className="text-zinc-600 w-8">{idx + 1}</span>
-                              <span className="flex-1">{log}</span>
-                           </div>
-                        ))}
-                     </div>
-                  </div>
-               )}
             </main>
 
             {!isTerminalCollapsed && (
-               <div className="h-[240px] border-t border-[#eeeeee] flex flex-col bg-white overflow-hidden">
-                  <TerminalPanel onClose={toggleTerminal} />
-               </div>
+               <TerminalPanel onClose={toggleTerminal} />
             )}
 
-            <footer className="h-7 bg-[#FAF9F8] border-t border-[#eeeeee] flex items-center justify-between px-6 shrink-0 z-30">
+            <footer className="h-7 th-surface-elevated border-t border-[var(--th-border-strong)] flex items-center justify-between px-6 shrink-0 z-30">
                <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#FF4D4D]">
                      <Network className="w-3.5 h-3.5" />
                      MONAD TESTNET
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-zinc-400">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest th-text-tertiary">
                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                     Node Synchronized
+                     Active
                   </div>
                </div>
                <div className="flex items-center gap-6">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                     Ln {cursorPos.line}, Col {cursorPos.column}
-                  </span>
-                  <div className="flex items-center gap-1.5 text-[10px] font-black text-black tracking-widest uppercase italic">
+                  {cursorPos && (
+                    <span className="text-[10px] font-bold th-text-tertiary uppercase tracking-widest">
+                       Ln {cursorPos.line}, Col {cursorPos.column}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-1.5 text-[10px] font-black th-text tracking-widest uppercase italic">
                      Powered by Aegis
                   </div>
                </div>

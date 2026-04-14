@@ -1,12 +1,14 @@
+import React, { useEffect, useRef, useState } from 'react';
 import { useTerminalStore } from '../../store/terminalStore';
 import { TerminalLogLine } from './TerminalLogLine';
 import { Trash2, ChevronDown, ChevronUp, Activity } from 'lucide-react';
-import { useEffect, useRef } from 'react';
 import { cn } from '../../lib/utils/cn';
 
 export function TerminalDrawer() {
-  const { logs, clearLogs, isExpanded, toggleExpanded } = useTerminalStore();
+  const { logs, clearLogs, isExpanded, toggleExpanded, height, setHeight } = useTerminalStore();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isResizing = useRef(false);
+  const [activeResizing, setActiveResizing] = useState(false);
 
   useEffect(() => {
     if (isExpanded) {
@@ -14,27 +16,61 @@ export function TerminalDrawer() {
     }
   }, [logs, isExpanded]);
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    setActiveResizing(true);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newHeight = window.innerHeight - e.clientY - 24; // 24 for the bottom margin
+    if (newHeight >= 44 && newHeight <= window.innerHeight * 0.8) {
+      setHeight(newHeight);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isResizing.current = false;
+    setActiveResizing(false);
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.removeEventListener('mouseup', handleMouseUp);
+  };
+
   return (
     <div 
       className={cn(
-        "fixed bottom-6 left-[25%] right-[25%] z-[60] transition-all duration-300 ease-in-out border border-[#eeeeee] bg-white shadow-xl rounded-xl overflow-hidden",
-        isExpanded ? "h-64 translate-y-0" : "h-11 translate-y-0 hover:bg-zinc-50"
+        "fixed bottom-6 left-[25%] right-[25%] z-[60] border border-[var(--th-border-strong)] th-surface shadow-xl rounded-xl overflow-hidden flex flex-col",
+        !activeResizing && "transition-all duration-300 ease-in-out",
+        !isExpanded && "h-11 translate-y-0 hover:th-surface-hover"
       )}
+      style={{ height: isExpanded ? `${height}px` : '44px' }}
     >
+      {/* Visual Resize Handle (IDE Style) */}
+      {isExpanded && (
+        <div 
+          className="absolute top-0 left-0 right-0 h-[3px] cursor-ns-resize z-[70] group/resizer"
+          onMouseDown={handleMouseDown}
+        >
+          <div className="w-full h-full bg-[var(--th-border-strong)] group-hover/resizer:bg-blue-500/50 transition-colors" />
+        </div>
+      )}
+
       {/* Header Area */}
       <div 
-        className="flex items-center justify-between px-5 h-11 cursor-pointer select-none border-b border-[#f5f5f5] group"
+        className="flex items-center justify-between px-5 h-11 min-h-[44px] cursor-pointer select-none border-b border-[var(--th-border)] group th-surface relative z-10"
         onClick={toggleExpanded}
       >
         <div className="flex items-center gap-3">
-          <Activity className={cn("w-4 h-4 transition-all duration-300", logs.some(l => l.type === 'pending') ? "text-black animate-pulse" : "text-zinc-400 group-hover:text-black")} />
-          <span className="text-[11px] font-bold text-zinc-400 group-hover:text-black uppercase tracking-wider transition-colors">
-            Activity Logs {logs.length > 0 && `(${logs.length})`}
+          <span className="text-[11px] font-bold th-text-tertiary group-hover:th-text uppercase tracking-wider transition-colors">
+            {'>_'} Activity Logs {logs.length > 0 && `(${logs.length})`}
           </span>
           {logs.some(l => l.type === 'pending') && (
             <div className="flex items-center gap-2 ml-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
-              <span className="text-[9px] font-bold text-black uppercase tracking-widest">Running</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+              <span className="text-[9px] font-bold th-text uppercase tracking-widest">Running</span>
             </div>
           )}
         </div>
@@ -43,13 +79,13 @@ export function TerminalDrawer() {
         <div className="flex items-center gap-4">
           <button 
             onClick={(e) => { e.stopPropagation(); clearLogs(); }}
-            className="p-1.5 text-zinc-300 hover:text-rose-500 transition-all hover:bg-rose-50 rounded"
+            className="p-1.5 th-text-tertiary hover:text-rose-500 transition-all hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded"
             title="Clear Console"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
-          <div className="w-px h-4 bg-zinc-100" />
-          <div className="p-1 rounded text-zinc-400 group-hover:text-black transition-all">
+          <div className="w-px h-4 bg-[var(--th-border-strong)]" />
+          <div className="p-1 rounded th-text-tertiary group-hover:th-text transition-all">
              {isExpanded ? (
                <ChevronDown className="w-4 h-4" />
              ) : (
@@ -61,9 +97,9 @@ export function TerminalDrawer() {
 
       {/* Narrative Region */}
       {isExpanded && (
-        <div className="h-[calc(100%-44px)] overflow-y-auto custom-scrollbar bg-black/[0.02]">
+        <div className="flex-1 overflow-y-auto custom-scrollbar th-surface-low">
           {logs.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-300 font-medium italic text-xs uppercase tracking-widest">
+            <div className="flex flex-col items-center justify-center h-full th-text-tertiary font-medium italic text-xs uppercase tracking-widest">
                No recent activity
             </div>
           ) : (

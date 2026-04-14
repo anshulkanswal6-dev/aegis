@@ -109,9 +109,22 @@
       "type": "object",
       "question": "What payload should be sent?"
     },
-    "notification_channel": {
+    "notification_channels": {
+      "type": "array",
+      "question": "How should I notify you?",
+      "options": ["email", "telegram", "both", "none"]
+    },
+    "telegram_message": {
       "type": "string",
-      "question": "Which notification channel should I use? Example: email, webhook, discord, telegram"
+      "question": "What message should I send you on Telegram?"
+    },
+    "email_subject": {
+      "type": "string",
+      "question": "What should the alert email subject be? (e.g., 'Low Balance Alert!')"
+    },
+    "email_body": {
+      "type": "string",
+      "question": "What message would you like to see in the email?"
     },
     "discord_webhook_url": {
       "type": "url",
@@ -271,14 +284,6 @@
       "integration_requirements": ["marketplace_integration"]
     },
     {
-      "type": "send_email_notification",
-      "category": "notification",
-      "python_handler": "action_send_email_notification",
-      "description": "Send an email notification.",
-      "required_fields": ["to", "subject", "message"],
-      "integration_requirements": ["email_provider"]
-    },
-    {
       "type": "send_webhook",
       "category": "notification",
       "python_handler": "action_send_webhook",
@@ -293,14 +298,6 @@
       "description": "Send a Discord webhook notification.",
       "required_fields": ["discord_webhook_url", "message"],
       "integration_requirements": ["discord_webhook"]
-    },
-    {
-      "type": "send_telegram_message",
-      "category": "notification",
-      "python_handler": "action_send_telegram_message",
-      "description": "Send a Telegram message.",
-      "required_fields": ["telegram_bot_token", "telegram_chat_id", "message"],
-      "integration_requirements": ["telegram_bot"]
     },
     {
       "type": "log_message",

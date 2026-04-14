@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8002';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8002';
 
 export interface StructuredQuestion {
   field: string;
@@ -39,9 +39,10 @@ export const agentService = {
     walletAddress?: string,
     knownFields?: Record<string, any>,
     planningModelId?: string,
-    codegenModelId?: string
+    codegenModelId?: string,
+    projectName?: string
   ): Promise<AgentResponse> {
-    console.log(`[AgentService] Chat: ${userMessage}`);
+    console.log(`[AgentService] Chat: ${userMessage} (Project: ${projectName})`);
     
     const response = await fetch(`${API_BASE}/chat`, {
       method: 'POST',
@@ -53,6 +54,7 @@ export const agentService = {
         known_fields: knownFields || {},
         planning_model_id: planningModelId || undefined,
         codegen_model_id: codegenModelId || undefined,
+        project_name: projectName || undefined,
       })
     });
     
@@ -68,9 +70,10 @@ export const agentService = {
     sessionId: string,
     fields: Record<string, any>,
     walletAddress?: string,
-    planningModelId?: string
+    planningModelId?: string,
+    projectName?: string
   ): Promise<AgentResponse> {
-    console.log(`[AgentService] Continue session: ${sessionId}`);
+    console.log(`[AgentService] Continue session: ${sessionId} (Project: ${projectName})`);
     
     const response = await fetch(`${API_BASE}/continue`, {
       method: 'POST',
@@ -80,6 +83,7 @@ export const agentService = {
         fields: fields,
         wallet_address: walletAddress || undefined,
         planning_model_id: planningModelId || undefined,
+        project_name: projectName || undefined,
       })
     });
     
@@ -150,9 +154,11 @@ export const agentService = {
     walletAddress?: string,
     sessionId?: string,
     description?: string,
-    files?: Record<string, string>
+    files?: Record<string, string>,
+    automationId?: string, // Added to target existing projects
+    projectId?: string     // Explicit project linkage
   ): Promise<any> {
-    console.log(`[AgentService] Deploying automation: ${name}`);
+    console.log(`[AgentService] Deploying automation: ${name} (project=${projectId}, automation=${automationId})`);
     
     const response = await fetch(`${API_BASE}/automations/deploy`, {
       method: 'POST',
@@ -161,6 +167,8 @@ export const agentService = {
         name,
         description: description || '',
         session_id: sessionId || '',
+        automation_id: automationId || undefined,
+        project_id: projectId || undefined,
         wallet_address: walletAddress || '',
         spec_json: specJson,
         files: files || {},
@@ -175,13 +183,19 @@ export const agentService = {
     return await response.json();
   },
 
-  async listAutomations(status?: string): Promise<any> {
-    const url = status
-      ? `${API_BASE}/automations/?status=${status}`
-      : `${API_BASE}/automations/`;
-    const response = await fetch(url);
+  async listAutomations(status?: string, projectId?: string): Promise<any> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (projectId) params.append('project_id', projectId);
+    
+    const response = await fetch(`${API_BASE}/automations/?${params.toString()}`);
     if (!response.ok) throw new Error('Failed to list automations');
     return await response.json();
+  },
+
+  async getAutomationByProject(projectId: string): Promise<any> {
+    const data = await this.listAutomations(undefined, projectId);
+    return data.automations?.[0] || null;
   },
 
   async getAutomation(automationId: string): Promise<any> {
@@ -225,4 +239,33 @@ export const agentService = {
     if (!response.ok) throw new Error('Failed to clear terminal logs');
     return await response.json();
   },
+  async triggerNow(automationId: string): Promise<any> {
+    const response = await fetch(`${API_BASE}/automations/${automationId}/trigger-now`);
+    if (!response.ok) throw new Error('Failed to trigger automation');
+    return await response.json();
+  },
+  
+  async getSession(sessionId: string): Promise<AgentResponse | null> {
+    try {
+      const response = await fetch(`${API_BASE}/automations/session/${sessionId}`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (!data.success) return null;
+      
+      // Map backend session state to AgentResponse interface
+      const s = data.session;
+      return {
+        session_id: s.id,
+        stage: s.stage,
+        status: 'restored',
+        agent_status: s.stage === 'complete' ? 'complete' : 'idle',
+        agent_message: 'Workspace restored from session.',
+        files: s.files,
+        plan_md: s.plan_md,
+      };
+    } catch (e) {
+      console.error('[AgentService] getSession failed', e);
+      return null;
+    }
+  }
 };

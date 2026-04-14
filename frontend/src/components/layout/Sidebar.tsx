@@ -1,38 +1,54 @@
 import { NavLink } from 'react-router-dom';
-import { Bot, Wallet, LayoutGrid, Play, ChevronRight, ChevronLeft, Settings, HelpCircle } from 'lucide-react';
+import { Wallet, LayoutGrid, Play, ChevronRight, ChevronLeft, HelpCircle, LogOut, HomeIcon, Sun, Moon, Monitor, Puzzle, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils/cn';
 import { useLayoutStore } from '../../store/layoutStore';
+import { useAccount, useDisconnect } from 'wagmi';
+import { ConnectKitButton } from 'connectkit';
+import { useThemeStore } from '../../hooks/useTheme';
+import logoPng from '../../assets/Copy of AEGIS (640 x 640 px) (1).png';
 
 const NAV_ITEMS = [
-  { label: 'Overview', to: '/', icon: Bot },
+  { label: 'Home', to: '/', icon: HomeIcon },
   { label: 'Network Wallet', to: '/wallet', icon: Wallet },
   { label: 'Playground', to: '/playground', icon: Play },
   { label: 'Projects', to: '/projects', icon: LayoutGrid },
+  { label: 'Integrations', to: '/integrations', icon: Puzzle },
 ];
 
 export function Sidebar() {
   const { isSidebarCollapsed, toggleSidebar } = useLayoutStore();
+  const { isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { theme, setTheme } = useThemeStore();
+
+  const toggleTheme = () => {
+    if (theme === 'system') setTheme('light');
+    else if (theme === 'light') setTheme('dark');
+    else setTheme('system');
+  };
+
+  const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : Monitor;
 
   return (
     <aside className={cn(
-      "fixed left-0 top-0 bottom-0 bg-white border-r border-[#eeeeee] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-sm",
+      "fixed left-0 top-0 bottom-0 th-surface border-r border-[var(--th-border-strong)] z-50 flex flex-col transition-all duration-300 ease-in-out shadow-sm",
       isSidebarCollapsed ? "w-16" : "w-64"
     )}>
       {/* Brand Section */}
       <div className={cn(
-        "h-16 flex items-center border-b border-[#eeeeee] transition-all",
+        "h-16 flex items-center border-b border-[var(--th-border-strong)] transition-all",
         isSidebarCollapsed ? "justify-center" : "px-6 gap-3"
       )}>
-        <div 
-          className="w-8 h-8 bg-black rounded flex items-center justify-center text-white shrink-0 cursor-pointer shadow-md active:scale-95 transition-transform"
+        <img 
+          src={logoPng} 
+          alt="AEGIS Logo" 
+          className="w-9 h-9 rounded-lg shrink-0 cursor-pointer shadow-sm active:scale-95 transition-transform"
           onClick={() => window.location.href = '/'}
-        >
-          <Bot className="w-5 h-5" />
-        </div>
+        />
         {!isSidebarCollapsed && (
           <div className="overflow-hidden whitespace-nowrap">
-            <h1 className="font-bold text-sm tracking-tight text-black leading-tight">Aegis</h1>
-            <p className="text-[10px] text-zinc-400 font-medium uppercase tracking-wider">Automation OS</p>
+            <h1 className="font-black text-base tracking-tighter th-text leading-tight uppercase italic">AEGIS</h1>
+            <p className="text-[10px] th-text-tertiary font-bold tracking-widest">Prompt To Onchain Jobs</p>
           </div>
         )}
       </div>
@@ -43,45 +59,101 @@ export function Sidebar() {
             key={item.to}
             to={item.to}
             className={({ isActive }) => cn(
-              "flex items-center rounded-md transition-all h-10 overflow-hidden group",
+              "flex items-center rounded-md transition-all h-10 overflow-hidden group outline-none focus:outline-none",
               isActive 
-                ? "bg-zinc-50 text-black border border-zinc-100 shadow-sm" 
-                : "text-zinc-500 hover:text-black hover:bg-zinc-50"
+                ? "th-surface-elevated th-text border border-[var(--th-border-strong)] shadow-sm" 
+                : "th-text-secondary hover:th-text hover:th-surface-hover border border-transparent"
             )}
           >
             {({ isActive }) => (
               <div className={cn("flex items-center h-full w-full", isSidebarCollapsed ? "justify-center" : "px-3")}>
-                <item.icon className={cn("w-4.5 h-4.5 shrink-0 transition-colors", isActive ? "text-black" : "text-zinc-400 group-hover:text-black")} />
+                <item.icon className={cn("w-4.5 h-4.5 shrink-0 transition-colors", isActive ? "th-text" : "th-text-tertiary group-hover:th-text")} />
                 {!isSidebarCollapsed && (
                   <span className="ml-3 font-medium text-[13px]">{item.label}</span>
                 )}
                 {isActive && !isSidebarCollapsed && (
-                  <div className="w-1.5 h-1.5 rounded-full bg-black ml-auto" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-auto" />
                 )}
               </div>
             )}
           </NavLink>
         ))}
+
+        {/* Documentation — opens in new tab */}
+        <a
+          href="/documentation"
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "flex items-center rounded-md transition-all h-10 overflow-hidden group outline-none focus:outline-none th-text-secondary hover:th-text hover:th-surface-hover border border-transparent"
+          )}
+        >
+          <div className={cn("flex items-center h-full w-full", isSidebarCollapsed ? "justify-center" : "px-3")}>
+            <BookOpen className="w-4.5 h-4.5 shrink-0 transition-colors th-text-tertiary group-hover:th-text" />
+            {!isSidebarCollapsed && (
+              <span className="ml-3 font-medium text-[13px]">Documentation</span>
+            )}
+          </div>
+        </a>
       </nav>
 
-      <div className="px-3 py-4 border-t border-[#eeeeee] space-y-1">
-        {!isSidebarCollapsed && (
-          <>
-            <button className="w-full flex items-center px-3 h-10 rounded-md text-zinc-500 hover:text-black hover:bg-zinc-50 transition-all group">
-              <Settings className="w-4.5 h-4.5 text-zinc-400 group-hover:text-black transition-colors" />
-              <span className="ml-3 font-medium text-[13px]">Settings</span>
-            </button>
-            <button className="w-full flex items-center px-3 h-10 rounded-md text-zinc-500 hover:text-black hover:bg-zinc-50 transition-all group">
-              <HelpCircle className="w-4.5 h-4.5 text-zinc-400 group-hover:text-black transition-colors" />
-              <span className="ml-3 font-medium text-[13px]">Help Center</span>
-            </button>
-          </>
+      <div className="px-3 py-4 border-t border-[var(--th-border-strong)] space-y-1">
+        <button 
+          onClick={toggleTheme}
+          className={cn(
+            "w-full flex items-center h-10 rounded-md th-text-secondary hover:th-text hover:th-surface-hover transition-all group outline-none focus:outline-none",
+            isSidebarCollapsed ? "justify-center" : "px-3"
+          )}
+          title={`Active Theme: ${theme}`}
+        >
+          <ThemeIcon className="w-4.5 h-4.5 th-text-tertiary group-hover:th-text transition-colors" />
+          {!isSidebarCollapsed && (
+            <div className="ml-3 flex items-center justify-between flex-1">
+              <span className="font-medium text-[13px]">Theme</span>
+              <span className="text-[10px] th-text-tertiary font-bold capitalize tracking-tighter bg-[var(--th-surface-elevated)] px-1.5 py-0.5 rounded-sm border border-[var(--th-border-strong)]">{theme}</span>
+            </div>
+          )}
+        </button>
+        <button className={cn(
+          "w-full flex items-center h-10 rounded-md th-text-secondary hover:th-text hover:th-surface-hover transition-all group outline-none focus:outline-none",
+          isSidebarCollapsed ? "justify-center" : "px-3"
+        )}>
+          <HelpCircle className="w-4.5 h-4.5 th-text-tertiary group-hover:th-text transition-colors" />
+          {!isSidebarCollapsed && <span className="ml-3 font-medium text-[13px]">Help Center</span>}
+        </button>
+
+        {isConnected ? (
+          <button 
+            onClick={() => disconnect()}
+            className={cn(
+              "w-full flex items-center h-10 rounded-md text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all group outline-none focus:outline-none",
+              isSidebarCollapsed ? "justify-center" : "px-3"
+            )}
+          >
+            <LogOut className="w-4.5 h-4.5 text-rose-400 group-hover:text-rose-600 transition-colors" />
+            {!isSidebarCollapsed && <span className="ml-3 font-bold text-[13px]">Logout</span>}
+          </button>
+        ) : (
+          <ConnectKitButton.Custom>
+            {({ show }: any) => (
+              <button 
+                onClick={show}
+                className={cn(
+                  "w-full flex items-center h-10 rounded-md th-text hover:th-surface-hover transition-all group border border-dashed border-[var(--th-border-strong)] outline-none focus:outline-none",
+                  isSidebarCollapsed ? "justify-center" : "px-3"
+                )}
+              >
+                <Wallet className="w-4.5 h-4.5 th-text-tertiary group-hover:th-text transition-colors" />
+                {!isSidebarCollapsed && <span className="ml-3 font-bold text-[13px]">Connect</span>}
+              </button>
+            )}
+          </ConnectKitButton.Custom>
         )}
         
         <button 
           onClick={toggleSidebar}
           className={cn(
-            "w-full h-10 rounded-md flex items-center text-zinc-400 hover:text-black hover:bg-zinc-50 transition-all group",
+            "w-full h-10 rounded-md flex items-center th-text-tertiary hover:th-text hover:th-surface-hover transition-all group outline-none focus:outline-none",
             isSidebarCollapsed ? "justify-center" : "px-3"
           )}
           title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}

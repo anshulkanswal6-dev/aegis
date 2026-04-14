@@ -17,7 +17,7 @@ import { MONAD_TESTNET_ID } from '../lib/config/chains';
 export function useAgentWallet() {
   const { toast } = useToast();
   const { address: userAddress, isConnected, chain } = useAccount();
-  const chainSymbol = chain?.nativeCurrency.symbol || 'ETH';
+  const chainSymbol = chain?.nativeCurrency.symbol || 'MON';
   const chainId = useChainId();
   const publicClient = usePublicClient();
   const addLog = useTerminalStore((s) => s.addLog);

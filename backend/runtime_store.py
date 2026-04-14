@@ -40,9 +40,11 @@ class AutomationRecord:
     """Represents a deployed automation in the runtime."""
     id: str
     name: str
+    project_id: str = "" # Grouping ID
     description: str = ""
-    session_id: str = ""
+    session_id: str = "" # Legacy / UI Session mapping
     wallet_address: str = "" # Added for Supabase identity
+    user_id: str = "" # Linked Supabase Profile ID
     # The structured spec produced by the agent (trigger + actions + params)
     spec_json: Dict[str, Any] = field(default_factory=dict)
     # status model: draft | planning | approved | ready_for_deploy | active | paused | failed
@@ -56,12 +58,31 @@ class AutomationRecord:
     last_error: Optional[str] = None
     # Agent-generated workspace files (for reference / export)
     files: Dict[str, str] = field(default_factory=dict)
+    current_version_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "AutomationRecord":
+        # Reconstruction for Production Schema (trigger_type, trigger_config, action_config)
+        if "trigger_type" in d and "spec_json" not in d:
+             action_cfg = d.get("action_config", {})
+             if not isinstance(action_cfg, dict):
+                 action_cfg = {}
+                 
+             d["spec_json"] = {
+                 "trigger": {
+                     "type": d["trigger_type"],
+                     "params": d.get("trigger_config", {})
+                 },
+                 "actions": action_cfg.get("actions", []),
+                 "notification": action_cfg.get("notification", {})
+             }
+        
+        # Handle legacy or alternative mappings (like 'spec')
+        if "spec" in d and "spec_json" not in d:
+             d["spec_json"] = d["spec"]
         return AutomationRecord(**{k: v for k, v in d.items() if k in AutomationRecord.__dataclass_fields__})
 
 
@@ -109,6 +130,16 @@ class TerminalLogEntry:
 class RuntimeStoreBase(ABC):
     """Abstract interface — swap implementations without changing callers."""
 
+    # --- Projects ---
+    @abstractmethod
+    def ensure_profile(self, wallet_address: str) -> str: ... # returns profile_id
+
+    @abstractmethod
+    def get_or_create_project(self, name: str, user_id: str, wallet_address: str) -> str: ... # returns project_id
+
+    @abstractmethod
+    def list_projects(self, wallet_address: str) -> List[Dict[str, Any]]: ...
+
     # --- Automations ---
     @abstractmethod
     def save_automation(self, record: AutomationRecord) -> AutomationRecord: ...
@@ -117,13 +148,24 @@ class RuntimeStoreBase(ABC):
     def get_automation(self, automation_id: str) -> Optional[AutomationRecord]: ...
 
     @abstractmethod
-    def list_automations(self, status: Optional[str] = None) -> List[AutomationRecord]: ...
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]: ...
 
     @abstractmethod
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]: ...
 
     @abstractmethod
     def delete_automation(self, automation_id: str) -> bool: ...
+
+    # --- Versions ---
+    @abstractmethod
+    def create_version(self, automation_id: str, files: Dict[str, str], version_num: Optional[int] = None) -> str: ... # returns version_id
+
+    # --- Runs ---
+    @abstractmethod
+    def create_run(self, automation_id: str, version_id: Optional[str], trigger_payload: Dict[str, Any]) -> str: ... # returns run_id
+
+    @abstractmethod
+    def update_run(self, run_id: str, updates: Dict[str, Any]) -> bool: ...
 
     # --- Logs ---
     @abstractmethod
@@ -145,6 +187,10 @@ class RuntimeStoreBase(ABC):
     @abstractmethod
     def clear_terminal_logs(self, project_id: str) -> int: ...
 
+    # --- Heartbeat ---
+    @abstractmethod
+    def update_heartbeat(self, automation_id: str): ...
+
 
 # =========================================================
 # In-Memory Store
@@ -159,6 +205,17 @@ class InMemoryStore(RuntimeStoreBase):
         self._logs: Dict[str, List[Dict[str, Any]]] = {}
         self._terminal_logs: Dict[str, List[Dict[str, Any]]] = {}
 
+    # --- Projects ---
+    def ensure_profile(self, wallet_address: str) -> str:
+        return "local-profile"
+
+    def get_or_create_project(self, name: str, user_id: str, wallet_address: str) -> str:
+        return f"local-proj-{name}"
+    
+    def list_projects(self, wallet_address: str) -> List[Dict[str, Any]]:
+        return []
+
+    # --- Automations ---
     def save_automation(self, record: AutomationRecord) -> AutomationRecord:
         with self._lock:
             self._automations[record.id] = record.to_dict()
@@ -169,12 +226,14 @@ class InMemoryStore(RuntimeStoreBase):
             d = self._automations.get(automation_id)
             return AutomationRecord.from_dict(d) if d else None
 
-    def list_automations(self, status: Optional[str] = None) -> List[AutomationRecord]:
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
         with self._lock:
             items = list(self._automations.values())
         records = [AutomationRecord.from_dict(d) for d in items]
         if status:
             records = [r for r in records if r.status == status]
+        if project_id:
+            records = [r for r in records if r.project_id == project_id]
         return records
 
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]:
@@ -192,6 +251,20 @@ class InMemoryStore(RuntimeStoreBase):
                 self._logs.pop(automation_id, None)
                 return True
             return False
+
+    # --- Versions ---
+    def create_version(self, automation_id: str, files: Dict[str, str], version_num: Optional[int] = None) -> str:
+        return str(uuid.uuid4())
+
+    # --- Runs ---
+    def create_run(self, automation_id: str, version_id: Optional[str], trigger_payload: Dict[str, Any]) -> str:
+        return str(uuid.uuid4())
+
+    def update_run(self, run_id: str, updates: Dict[str, Any]) -> bool:
+        return True
+
+    def update_heartbeat(self, automation_id: str):
+        pass
 
     def add_log(self, entry: RunLogEntry) -> RunLogEntry:
         with self._lock:
@@ -265,6 +338,7 @@ class JsonFileStore(RuntimeStoreBase):
         # For a local demo, a simple reload is robust.
         self._automations = self._load_json(self._auto_path)
         self._logs = self._load_json(self._logs_path)
+        self._terminal_logs = self._load_json(self._terminal_logs_path)
 
     @staticmethod
     def _load_json(path: Path) -> Dict:
@@ -292,6 +366,16 @@ class JsonFileStore(RuntimeStoreBase):
         with open(self._terminal_logs_path, "w", encoding="utf-8") as f:
             json.dump(self._terminal_logs, f, indent=2, default=str)
 
+    # --- Projects ---
+    def ensure_profile(self, wallet_address: str) -> str:
+        return "local-profile"
+
+    def get_or_create_project(self, name: str, user_id: str, wallet_address: str) -> str:
+        return f"local-proj-{name}"
+
+    def list_projects(self, wallet_address: str) -> List[Dict[str, Any]]:
+        return []
+
     def save_automation(self, record: AutomationRecord) -> AutomationRecord:
         with self._lock:
             self._automations[record.id] = record.to_dict()
@@ -304,13 +388,15 @@ class JsonFileStore(RuntimeStoreBase):
             d = self._automations.get(automation_id)
             return AutomationRecord.from_dict(d) if d else None
 
-    def list_automations(self, status: Optional[str] = None) -> List[AutomationRecord]:
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
         with self._lock:
             self._reload()
             items = list(self._automations.values())
         records = [AutomationRecord.from_dict(d) for d in items]
         if status:
             records = [r for r in records if r.status == status]
+        if project_id:
+            records = [r for r in records if r.project_id == project_id]
         return records
 
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]:
@@ -333,6 +419,20 @@ class JsonFileStore(RuntimeStoreBase):
                 self._flush_logs()
                 return True
             return False
+
+    # --- Versions ---
+    def create_version(self, automation_id: str, files: Dict[str, str], version_num: Optional[int] = None) -> str:
+        return str(uuid.uuid4())
+
+    # --- Runs ---
+    def create_run(self, automation_id: str, version_id: Optional[str], trigger_payload: Dict[str, Any]) -> str:
+        return str(uuid.uuid4())
+
+    def update_run(self, run_id: str, updates: Dict[str, Any]) -> bool:
+        return True
+
+    def update_heartbeat(self, automation_id: str):
+        pass
 
     def add_log(self, entry: RunLogEntry) -> RunLogEntry:
         with self._lock:

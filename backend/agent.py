@@ -22,9 +22,46 @@ else:
     print(f"DEBUG: GEMINI_API_KEY found: {api_val[:10]}...")
 
 # =========================================================
-# In-memory session tracking
+# Persistent session tracking
 # =========================================================
-_sessions: Dict[str, Dict[str, Any]] = {}
+class SessionManager(dict):
+    """A dictionary that persists itself to a JSON file."""
+    def __init__(self, filename="sessions.json"):
+        super().__init__()
+        self.filename = Path(__file__).parent / filename
+        self._load()
+
+    def _load(self):
+        if self.filename.exists():
+            try:
+                with open(self.filename, "r") as f:
+                    data = json.load(f)
+                    self.update(data)
+                print(f"[AEGIS SessionManager] Loaded {len(data)} sessions from {self.filename}")
+            except Exception as e:
+                print(f"[AEGIS SessionManager] Failed to load sessions: {e}")
+
+    def _save(self):
+        try:
+            with open(self.filename, "w") as f:
+                json.dump(self.copy(), f, indent=2)
+        except Exception as e:
+            print(f"[AEGIS SessionManager] Failed to save sessions: {e}")
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self._save()
+
+    def update(self, *args, **kwargs):
+        super().update(*args, **kwargs)
+        self._save()
+
+_sessions = SessionManager()
+
+
+def get_session_state(session_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve a session's state from the global session manager."""
+    return _sessions.get(session_id)
 
 
 class GenAIAgent:
@@ -46,10 +83,15 @@ class GenAIAgent:
         }
 
         self.models: Dict[str, Dict[str, str]] = {
-            "gemini_flash": {"provider": "gemini", "model_name": "models/gemini-flash-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 1.5 Flash"},
-            "gemini_pro": {"provider": "gemini", "model_name": "models/gemini-pro-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 1.5 Pro"},
-            "claude_sonnet": {"provider": "claude", "model_name": "claude-3-5-sonnet-latest", "api_key_env": "ANTHROPIC_API_KEY", "label": "Claude Sonnet"},
+            "gemini_flash": {"provider": "gemini", "model_name": "models/gemini-flash-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini Flash (Latest)"},
+            "gemini_pro": {"provider": "gemini", "model_name": "models/gemini-pro-latest", "api_key_env": "GEMINI_API_KEY", "label": "Gemini Pro (Latest)"},
+            "gemini_2_flash": {"provider": "gemini", "model_name": "models/gemini-2.0-flash", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 2.0 Flash"},
+            "gemini_3_flash": {"provider": "gemini", "model_name": "models/gemini-3-flash-preview", "api_key_env": "GEMINI_API_KEY", "label": "Gemini 3 Flash (Preview)"},
+            "claude_sonnet": {"provider": "claude", "model_name": "claude-3-5-sonnet-latest", "api_key_env": "ANTHROPIC_API_KEY", "label": "Claude 3.5 Sonnet"},
         }
+
+        self.mock_mode = os.getenv("MOCK_AGENT", "false").lower() == "true"
+
 
 
         # Build the system prompt with catalogue knowledge baked in
@@ -60,6 +102,7 @@ class GenAIAgent:
     # ==========================================================
     def _build_system_prompt(self) -> str:
         """Build a rich system prompt that includes all triggers and actions from catalogues."""
+        project_context = "" # Default empty for base prompt
 
         # Build trigger descriptions
         trigger_list = []
@@ -108,6 +151,31 @@ You help users build on-chain automations. You understand the following TRIGGERS
 - **NEVER ASK FOR PRIVATE KEYS, SEED PHRASES, OR METAMASK SECRETS.**
 - For transfer/payment automations (e.g., `send_native_token`, `send_erc20`), assume the sender is the **Agent Wallet**.
 - If the user hasn't provided a `wallet_address`, you can ask for it, but refer to it as the "Agent Wallet address" or "execution wallet". Do NOT ask for the key.
+
+## IMPORTANT: NOTIFICATIONS (CRITICAL)
+**DO NOT use legacy actions like `send_email_notification` or `send_telegram_message`. They are deprecated.**
+For EVERY automation, you MUST process notifications through the dedicated `notification` field in the final spec.
+
+### Notification Delivery (STEP-BY-STEP):
+1. **Choose Channel**: If the user says "notifies me" without a channel, you MUST ask for their choice: [Email, Telegram, Both].
+2. **Collect Details**: Once the channel is selected, ask for:
+    - Telegram: `telegram_message` (what should the alert say?).
+    - Email: `to` (recipient email) and `email_body`.
+    - **Cooldown**: Ask if they want a specific cooldown period (e.g. "wait 60 seconds before sending another alert") using the `notification_cooldown` field. **IMPORTANT: Collect this value in SECONDS only.** If not mentioned, default to 300.
+3. **Remind**: Always remind users to link their Telegram account in the **Integrations** tab if they select it.
+4. **Draft Planning**: Only skip these questions if the user explicitly says "skip questions" or "fast track".
+
+### FINAL SPEC STRUCTURE:
+In your final generated JSON code for `config.json`, use this structure:
+```json
+"notification": {{
+  "channels": ["telegram"],
+  "cooldown": 300,
+  "telegram": {{ "message": "..." }},
+  "email": {{ "to": "...", "subject": "...", "body": "..." }}
+}}
+```
+Do NOT place notification fields inside the `actions` array.
 
 ## IMPORTANT: PROTOCOL INTEGRATIONS
 We are a platform that generates actual on-chain automation projects. We are NOT directly integrated with every protocol’s backend API yet.
@@ -174,6 +242,9 @@ Return:
   "structured_questions": [<questions for remaining fields, same format as above>]
 }}
 
+## PROJECT CONTEXT
+{project_context}
+
 ## IMPORTANT RULES:
 1. ALWAYS respond with valid JSON only. No markdown, no code fences, no extra text.
 2. **ZERO-PLACEHOLDER RULE**: NEVER invent values or use placeholders like `[[current_time_plus_2_minutes]]`, `[[HH:MM]]`, or `0x...` for missing fields. If a field is required in the catalogue and the user hasn't provided it, you MUST mark it as missing and ASK the user.
@@ -194,13 +265,16 @@ Return:
     # ==========================================================
     # MAIN CHAT ENTRY POINT
     # ==========================================================
-    def chat(self, user_message: str, session_id: Optional[str] = None, wallet_address: Optional[str] = None, known_fields: Optional[Dict[str, Any]] = None, planning_model_id: str = "gemini_flash", codegen_model_id: str = "gemini_flash") -> Dict[str, Any]:
+    def chat(self, user_message: str, session_id: Optional[str] = None, wallet_address: Optional[str] = None, 
+             known_fields: Optional[Dict[str, Any]] = None, planning_model_id: str = "gemini_flash", 
+             codegen_model_id: str = "gemini_flash", project_name: Optional[str] = None) -> Dict[str, Any]:
         if not session_id:
             session_id = str(uuid.uuid4())
         if session_id not in _sessions:
             _sessions[session_id] = {
                 "id": session_id, "stage": "idle",
                 "wallet_address": wallet_address,
+                "project_name": project_name, # Preserved project name
                 "known_fields": known_fields or {},
                 "history": [], "selected_trigger": None,
                 "selected_actions": [], "plan_md": "", "files": {},
@@ -210,14 +284,28 @@ Return:
         session = _sessions[session_id]
         if wallet_address:
             session["wallet_address"] = wallet_address
+            # Sync with Supabase so terminal logs can be persisted
+            try:
+                from runtime_store import get_store
+                store = get_store()
+                u_id = store.ensure_profile(wallet_address)
+                p_name = session.get("project_name") or f"Chat {session_id[:8]}"
+                store.get_or_create_project(name=p_name, user_id=u_id, wallet_address=wallet_address, project_id=session_id)
+            except Exception as e:
+                print(f"[AEGIS DB Sync Error] {e}")
+
         session["history"].append({"role": "user", "content": user_message})
+        _sessions._save() # Explicit Save
         session["codegen_model_id"] = codegen_model_id
         if known_fields:
             session["known_fields"].update(known_fields)
+        if project_name:
+            session["project_name"] = project_name
 
         # Send everything to Gemini
         try:
-            ai_response = self._ask_gemini(session["history"], planning_model_id)
+            project_ctx = f"CURRENT PROJECT NAME: {session.get('project_name')}\n" if session.get('project_name') else ""
+            ai_response = self._ask_gemini(session["history"], planning_model_id, project_ctx)
         except Exception as e:
             print(f"[AEGIS AI Error] {str(e)}")
             traceback.print_exc()
@@ -231,6 +319,7 @@ Return:
         # --- CASE 1: Casual chat ---
         if intent == "chat":
             session["history"].append({"role": "assistant", "content": agent_message})
+            _sessions._save() # Explicit Save
             return self._response(session_id, "idle", "chat", "greeting", agent_message)
 
         # --- CASE 2: Automation intent ---
@@ -246,10 +335,30 @@ Return:
             session["selected_trigger"] = trigger_data
             session["selected_actions"] = actions_data
 
-            # If there are missing fields, ask for them
-            if missing_fields and structured_questions:
+            # DECISION: To Plan or to Ask?
+            # We only skip questions if the missing fields are "minor" technical ones.
+            # Notification channels and wallet address are CRITICAL and user expects to be asked.
+            critical_missing = [f for f in missing_fields if f in ["notification_channels", "wallet_address", "telegram_message", "to"]]
+            
+            user_input = user_message.lower()
+            wants_fast_track = any(w in user_input for w in ["fast track", "skip questions", "just build it"])
+            
+            # If there are critical missing fields AND user didn't explicitly say "fast track", ask questions
+            if critical_missing and structured_questions and not wants_fast_track:
                 session["stage"] = "needs_input"
                 session["history"].append({"role": "assistant", "content": agent_message})
+                
+                # Ensure project exists before logging (fixes FK error)
+                if wallet_address:
+                    try:
+                        from runtime_store import get_store
+                        store = get_store()
+                        u_id = store.ensure_profile(wallet_address)
+                        store.get_or_create_project(name=f"Chat {session_id[:8]}", user_id=u_id, wallet_address=wallet_address, project_id=session_id)
+                    except Exception: pass
+
+                log_service.log_terminal(session_id, f"❓ Critical fields missing: {', '.join(critical_missing)}. Asking user.")
+                _sessions._save()
                 return {
                     "session_id": session_id,
                     "stage": "needs_input",
@@ -259,16 +368,9 @@ Return:
                     "structured_questions": structured_questions,
                     "files": {}
                 }
-                log_service.log_terminal(session_id, f"❓ Missing fields: {', '.join(missing_fields)}. Asking user for input.")
-                return {
-                    "session_id": session_id,
-                    "stage": "needs_input",
-                    "status": "waiting_for_input",
-                    "agent_status": "asking",
-                    "agent_message": agent_message,
-                    "structured_questions": structured_questions,
-                    "files": {}
-                }
+            
+            # If we are here, we are either missing nothing, or it's non-critical/fast-track.
+            log_service.log_terminal(session_id, "📝 Proceeding to planning...")
 
             # All fields present → generate plan
             session["stage"] = "awaiting_approval"
@@ -276,6 +378,7 @@ Return:
             plan_md = self._generate_plan_md(trigger_data, actions_data, session["known_fields"])
             session["plan_md"] = plan_md
             session["history"].append({"role": "assistant", "content": agent_message})
+            _sessions._save() # Explicit Save
             return {
                 "session_id": session_id,
                 "stage": "awaiting_approval",
@@ -329,32 +432,48 @@ Return:
 
         # Default fallback — treat as chat
         session["history"].append({"role": "assistant", "content": agent_message})
+        _sessions._save()
         return self._response(session_id, "idle", "chat", "greeting", agent_message)
 
     # ==========================================================
     # CONTINUE CHAT (follow-up field submissions)
     # ==========================================================
-    def continue_chat(self, session_id: str, fields: Dict[str, Any], wallet_address: Optional[str] = None, planning_model_id: str = "gemini_flash") -> Dict[str, Any]:
+    def continue_chat(self, session_id: str, fields: Dict[str, Any], wallet_address: Optional[str] = None, 
+                      planning_model_id: str = "gemini_flash", project_name: Optional[str] = None) -> Dict[str, Any]:
         if session_id not in _sessions:
             # Session lost after restart - gracefully transition back to a new chat
-            log_service.log_terminal(session_id, "⚠️ Session not found. Restarting chat with provided fields.")
-            return self.chat("I'm back! Let's resume where we left off.", session_id, wallet_address=wallet_address, known_fields=fields, planning_model_id=planning_model_id)
+            log_service.log_terminal(session_id, "⚠️ Session not found. Restarting chat with provided context.")
+            return self.chat("I'm back! Let's resume where we left off.", session_id, wallet_address=wallet_address, known_fields=fields, planning_model_id=planning_model_id, project_name=project_name)
 
         session = _sessions[session_id]
+        if project_name:
+            session["project_name"] = project_name
         if wallet_address:
             session["wallet_address"] = wallet_address
+            # Sync with Supabase
+            try:
+                from runtime_store import get_store
+                store = get_store()
+                u_id = store.ensure_profile(wallet_address)
+                p_name = session.get("project_name") or f"Chat {session_id[:8]}"
+                store.get_or_create_project(name=p_name, user_id=u_id, wallet_address=wallet_address, project_id=session_id)
+            except Exception as e:
+                print(f"[AEGIS DB Sync Error] {e}")
+
         session["known_fields"].update(fields)
 
         # Build a natural message from the submitted fields
         fields_text = ", ".join([f"{k}: {v}" for k, v in fields.items()])
         user_msg = f"Here are the values: {fields_text}"
         session["history"].append({"role": "user", "content": user_msg})
+        _sessions._save() # Explicit Save
 
         log_service.log_terminal(session_id, f"Received follow-up fields: {fields_text}")
 
         # Let Gemini decide if more fields are needed
         try:
-            ai_response = self._ask_gemini(session["history"], planning_model_id)
+            project_ctx = f"CURRENT PROJECT NAME: {session.get('project_name')}\n" if session.get('project_name') else ""
+            ai_response = self._ask_gemini(session["history"], planning_model_id, project_ctx)
         except Exception as e:
             print(f"[AEGIS Continue Error] {str(e)}")
             # Try to proceed with what we have
@@ -370,10 +489,12 @@ Return:
 
         session["known_fields"].update(new_fields)
         session["history"].append({"role": "assistant", "content": agent_message})
+        _sessions._save() # Explicit Save
 
         if still_missing and structured_questions:
             session["stage"] = "needs_input"
             log_service.log_terminal(session_id, f"❓ Still missing fields: {', '.join(still_missing)}. Asking user for input.")
+            _sessions._save()
             return {
                 "session_id": session_id,
                 "stage": "needs_input",
@@ -407,29 +528,51 @@ Return:
 
         try:
             files = self._generate_code_with_gemini(spec, session["known_fields"], codegen_model)
+            # Normalization: Ensure files is a Dict[str, str]
+            if isinstance(files, dict):
+                normalized = {}
+                for name, data in files.items():
+                    if isinstance(data, dict) and "content" in data:
+                        normalized[name] = data["content"]
+                    elif isinstance(data, str):
+                        normalized[name] = data
+                    else:
+                        normalized[name] = str(data)
+                files = normalized
         except Exception as e:
             print(f"[AEGIS Code Gen Error] {str(e)}")
             log_service.log_terminal(session_id, "❌ Code generation failed. Falling back to template-based generation.")
             # Fallback to template-based generation
-            files = self._generate_workspace_files_fallback(spec)
+            files = self._generate_workspace_files_fallback(spec, session)
 
         session.update({"stage": "complete", "files": files})
         log_service.log_terminal(session_id, "✅ Code generation complete!")
+        _sessions._save()
         return {
             "session_id": session_id,
             "stage": "complete",
             "status": "success",
             "agent_status": "complete",
             "agent_message": "Your automation code is ready! 🚀 Check out the generated files in your workspace. The main.py has your full automation logic.",
-            "files": files
+            "files": files,
+            "spec": spec
         }
 
     # ==========================================================
     # GEMINI COMMUNICATION
     # ==========================================================
-    def _ask_gemini(self, history: List[Dict[str, str]], model_id: str) -> Dict[str, Any]:
+    def _ask_gemini(self, history: List[Dict[str, str]], model_id: str, project_context: str = "") -> Dict[str, Any]:
         """Send the conversation to Gemini and get a structured JSON response."""
+        if self.mock_mode:
+            print("[AEGIS MOCK] MOCK_AGENT is true. Returning simulated response.")
+            # Basic fallback if they turned on MOCK_AGENT due to rate limits
+            return {
+                "intent": "chat",
+                "message": "Hey! I'm running in mock mode right now (usually because we hit API rate limits). I can't generate specific automations but I can still chat with you. Try checking your Gemini key or waiting for the quota to reset! 🤖"
+            }
+
         cfg = self.models.get(model_id, self.models["gemini_flash"])
+
 
         # Build the conversation for Gemini
         conversation_messages = []
@@ -442,7 +585,11 @@ Return:
 
         conversation_text = "\n".join(conversation_messages)
 
-        payload = {"conversation": conversation_text}
+        # project_context is now passed in as an argument
+        payload = {
+            "conversation": conversation_text,
+            "project_context": project_context
+        }
 
         if cfg["provider"] == "gemini":
             raw_text = self._gemini_complete_text(self._system_prompt, payload, cfg)
@@ -471,6 +618,7 @@ THE PROJECT MUST BE HONEST: If an action involves a specific protocol (DEX, NFT 
 ### AUTOMATION SPECIFICATION:
 TRIGGER TYPE: {trigger_type}
 ACTION TYPES: {json.dumps(action_types)}
+NOTIFICATION: {json.dumps(spec.get('notification', {}), indent=2)}
 PARAMETERS: {json.dumps(fields, indent=2)}
 SPEC ID: {spec['id']}
 
@@ -496,16 +644,15 @@ Generate these files and return them as a JSON object (filename: content):
     - MUST CLEAN ACTION PARAMS: Only include fields relevant to each specific action. For 'send_native_token', ONLY include 'recipient_address' and 'amount'. For 'send_email_notification', ONLY include 'to', 'subject', and 'message'. Do NOT put trigger-only fields like 'date' or 'timezone' into action params.
     - DATES: Use the extracted 'date' and 'time' for the trigger. If 'date' is 'today', keep it as 'today' (the engine now resolves this).
     - Example schema:
-      {{
-        "name": "{fields.get('name', 'Automation Project')}",
-        "spec_id": "{spec['id']}",
-        "chain": {{ "name": "Monad Testnet", "rpc": "https://testnet-rpc.monad.xyz" }},
-        "wallet": {{ "address": "{fields.get('wallet_address', '')}" }},
         "trigger": {{ "type": "{trigger_type}", "params": {{ "date": "today", "time": "22:30", "timezone": "IST" }} }},
         "actions": [
-          {{ "type": "send_native_token", "params": {{ "recipient_address": "0x...", "amount": 0.001 }} }},
-          {{ "type": "send_email_notification", "params": {{ "to": "...", "subject": "...", "message": "..." }} }}
+          {{ "type": "send_native_token", "params": {{ "recipient_address": "0x...", "amount": 0.001 }} }}
         ],
+        "notification": {{
+          "channels": ["telegram"],
+          "telegram": {{ "message": "The automation triggered successfully!" }},
+          "email": {{ "to": "...", "subject": "...", "body": "..." }}
+        }},
         "runtime": {{ "interval_seconds": 30 }}
       }}
 
@@ -563,7 +710,7 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
             pass
 
         # Fallback to template if parsing fails
-        return self._generate_workspace_files_fallback(spec)
+        return self._generate_workspace_files_fallback(spec, {})
 
     # ==========================================================
     # HELPERS
@@ -577,6 +724,7 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
             session["known_fields"]
         )
         session["plan_md"] = plan_md
+        _sessions._save() # Explicit Save
         msg = agent_message or "All inputs received! I've drafted the execution plan. Review it and approve when ready. ✅"
         return {
             "session_id": session_id,
@@ -595,10 +743,23 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
         }
 
     def _build_spec(self, trigger: Any, actions: Any, fields: Dict[str, Any]) -> Dict[str, Any]:
+        # Extract notification settings for top-level spec access
+        notification = {
+            "channels": fields.get("notification_channels", ["email"]),
+            "cooldown": fields.get("notification_cooldown") or 300,
+            "telegram": {"message": fields.get("telegram_message") or "AEGIS Alert: Automation Condition Met"},
+            "email": {
+                "to": fields.get("to") or fields.get("email_address"),
+                "subject": fields.get("email_subject") or fields.get("subject") or "AEGIS Alert",
+                "body": fields.get("email_body") or fields.get("message") or "Automation condition met."
+            }
+        }
+        
         return {
             "id": "AEGIS-" + str(uuid.uuid4())[:6],
             "trigger": trigger,
             "actions": actions if isinstance(actions, list) else [actions],
+            "notification": notification,
             "params": fields,
             "timestamp": time.time()
         }
@@ -664,7 +825,7 @@ Automate **{action_names[0] if action_names else 'process'}** when **{trigger_na
     # ==========================================================
     # FALLBACK FILE GENERATION (if Gemini code gen fails)
     # ==========================================================
-    def _generate_workspace_files_fallback(self, spec: Dict[str, Any]) -> Dict[str, str]:
+    def _generate_workspace_files_fallback(self, spec: Dict[str, Any], session: Dict[str, Any]) -> Dict[str, str]:
         trigger = spec["trigger"]
         trigger_type = trigger.get("type", "unknown") if isinstance(trigger, dict) else str(trigger)
         spec_id = spec["id"]
@@ -750,22 +911,43 @@ if __name__ == "__main__":
         trigger_params = {}
         if trigger_type in ["run_once_at_datetime", "run_daily_at_time", "run_between_time_window", "run_weekly_on_day_time", "run_monthly_on_date_time"]:
             trigger_params = {k: all_params[k] for k in ["date", "time", "timezone", "weekday", "day_of_month", "start_time", "end_time"] if k in all_params}
-        elif trigger_type in ["wallet_balance_below", "wallet_balance_above"]:
-            trigger_params = {k: all_params[k] for k in ["token", "asset", "threshold"] if k in all_params}
-        elif trigger_type in ["token_price_below", "token_price_above"]:
-             trigger_params = {k: all_params[k] for k in ["asset", "token", "quote_currency", "threshold", "price_source"] if k in all_params}
-        else:
-            trigger_params = all_params.copy()
+        # 1. Recover trigger if AI PLANNING failed but Fields are known
+        all_params = session.get("known_fields", {})
+        trigger_type = spec.get("trigger", {}).get("type", "None") if spec.get("trigger") else "None"
+        trigger_params = spec.get("trigger", {}).get("params", {}) if spec.get("trigger") else {}
+        
+        # Heuristic: If planning has "None" but we have balance params, recover!
+        if trigger_type == "None":
+            if "token" in all_params or "asset" in all_params or "threshold" in all_params:
+                trigger_type = "wallet_balance_below"
+                trigger_params = {
+                    "token": all_params.get("token") or all_params.get("asset") or "MON",
+                    "threshold": all_params.get("threshold") or 2,
+                    "wallet_address": all_params.get("wallet_address") or session.get("wallet_address") or ""
+                }
 
-        # Structured configuration matching the prompt requirement
+        # 2. Recover Chain if unknown
+        chain_name = session.get("known_fields", {}).get("chain_name", "Monad Testnet")
+        chain_rpc = session.get("known_fields", {}).get("rpc_url", "https://testnet-rpc.monad.xyz")
+        
+        # Broad Normalization for Monad
+        if "mon" in str(all_params).lower() or "monad" in str(all_params).lower():
+            chain_name = "Monad Testnet"
+            chain_rpc = "https://testnet-rpc.monad.xyz"
+
+        action_types = [a.get("type", "unknown") if isinstance(a, dict) else str(a) for a in spec.get("actions", [])]
+        if not action_types:
+            action_types = ["log_message"] # Default useful action
+
         config_data = {
+            "project_name": f"Automation Project {spec_id[:6]}",
             "spec_id": spec_id,
             "chain": {
-                "name": spec["params"].get("chain", "unknown"),
-                "rpc": spec["params"].get("rpc_url", "")
+                "name": chain_name,
+                "rpc": chain_rpc
             },
             "wallet": {
-                "address": spec["params"].get("wallet_address", "")
+                "address": all_params.get("wallet_address") or session.get("wallet_address") or ""
             },
             "trigger": {
                 "type": trigger_type,
@@ -778,8 +960,20 @@ if __name__ == "__main__":
                     "integration": {
                         "// TODO": "Replace with router_address, nft_contract, or faucet_url for this action"
                     }
-                } for atype in action_types
+                } for atype in action_types if atype not in ["send_email_notification", "send_telegram_message"]
             ],
+            "notification": {
+                "channels": all_params.get("notification_channels", ["email"]),
+                "cooldown": all_params.get("notification_cooldown") or 300,
+                "telegram": {
+                    "message": all_params.get("telegram_message") or all_params.get("message") or "AEGIS Alert: Automation Condition Met"
+                },
+                "email": {
+                    "to": all_params.get("to"),
+                    "subject": all_params.get("email_subject") or all_params.get("subject") or "AEGIS Alert",
+                    "body": all_params.get("email_body") or all_params.get("message") or "Your automation condition has been met."
+                }
+            },
             "runtime": {
                 "interval_seconds": 30
             }
@@ -816,6 +1010,26 @@ The generated code provided the orchestration logic, but protocol-specific detai
     # ==========================================================
     # AI COMPLETION LAYER
     # ==========================================================
+    def _fix_truncated_json(self, json_str: str) -> str:
+        """Attempt to close open braces/brackets and remove trailing commas in truncated JSON."""
+        json_str = json_str.strip()
+        # Remove trailing commas that break parsing
+        json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+        json_str = re.sub(r',\s*$', '', json_str)
+        
+        # Balance braces
+        open_braces = json_str.count('{')
+        close_braces = json_str.count('}')
+        open_brackets = json_str.count('[')
+        close_brackets = json_str.count(']')
+        
+        if open_brackets > close_brackets:
+            json_str += ']' * (open_brackets - close_brackets)
+        if open_braces > close_braces:
+            json_str += '}' * (open_braces - close_braces)
+            
+        return json_str
+
     def _extract_json(self, text: str) -> Dict[str, Any]:
         """Extract JSON from AI response, handling various formats."""
         text = text.strip()
@@ -827,11 +1041,22 @@ The generated code provided the orchestration logic, but protocol-specific detai
         try:
             s = text.find("{")
             e = text.rfind("}")
-            if s == -1 or e == -1:
+            if s == -1:
                 return {"intent": "chat", "message": text}
-            return json.loads(text[s:e + 1])
-        except json.JSONDecodeError:
-            # If JSON parsing fails, treat as chat response
+            
+            # If no closing brace, or closing brace is before opening, try to fix it
+            if e == -1 or e < s:
+                fixed_text = self._fix_truncated_json(text[s:])
+                return json.loads(fixed_text)
+                
+            json_payload = text[s:e + 1]
+            try:
+                return json.loads(json_payload)
+            except json.JSONDecodeError:
+                fixed_payload = self._fix_truncated_json(json_payload)
+                return json.loads(fixed_payload)
+        except Exception:
+            # If all fails, treat as chat response
             return {"intent": "chat", "message": text}
 
     def _gemini_complete_text(self, sys: str, pl: Dict[str, Any], cfg: Dict[str, str]) -> str:
@@ -846,24 +1071,31 @@ The generated code provided the orchestration logic, but protocol-specific detai
         # Retry with backoff for rate limits
         import time
         import random
-        max_retries = 10
+        max_retries = 5  # Reduced from 10 to fail faster and notify user
         for attempt in range(max_retries):
             try:
                 return m.generate_content(prompt).text.strip()
             except Exception as e:
                 err_msg = str(e)
-                # 429 is Rate Limit or Quota Exceeded
-                if "429" in err_msg or "Resource has been exhausted" in err_msg:
+                # 429 is Rate Limit or Quota Exceeded (Resource exhausted)
+                if "429" in err_msg or "Resource has been exhausted" in err_msg or "quota" in err_msg.lower():
                     # Exponential backoff with jitter
-                    wait = (2 ** attempt) + (random.randint(0, 1000) / 1000.0)
+                    wait = (2 ** (attempt + 1)) + (random.randint(0, 1000) / 1000.0)
                     if attempt < max_retries - 1:
                         print(f"[Gemini 429] Rate limited (attempt {attempt + 1}/{max_retries}). Retrying in {wait:.1f}s...")
                         time.sleep(wait)
                         continue
+                    else:
+                        print("[Gemini 429] Quota exceeded after multiple retries. Informing user.")
+                        return json.dumps({
+                            "intent": "chat", 
+                            "message": "I'm currently hitting a Google Gemini rate limit or quota exceeded with your key. You might need to wait a few minutes or switch to a paid tier key! 🚦"
+                        })
                 
-                # For all other exceptions or after all retries exhausted
+                # For all other exceptions
                 print(f"[Gemini Error] {err_msg}")
                 raise e
+
         return "" # Should not reach here due to raise
 
     def _claude_complete_text(self, sys: str, pl: Dict[str, Any], cfg: Dict[str, str]) -> str:

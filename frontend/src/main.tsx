@@ -2,7 +2,7 @@ import { StrictMode, Component, type ErrorInfo, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { Web3Provider } from './app/providers/Web3Provider'
+import { Web3Provider } from './components/webproviders'
 import { ToastProvider } from './hooks/useToast'
 
 // Error boundary to catch render crashes
@@ -20,12 +20,12 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       return (
-        <div style={{ background: '#000', color: '#fff', minHeight: '100vh', padding: '60px', fontFamily: 'monospace' }}>
+        <div style={{ background: 'var(--th-bg)', color: 'var(--th-text)', minHeight: '100vh', padding: '60px', fontFamily: 'Inter, sans-serif' }}>
           <h1 style={{ fontSize: '2rem', marginBottom: '20px', color: '#f43f5e' }}>⚠️ Runtime Error</h1>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '14px', color: '#a1a1aa', lineHeight: '1.8' }}>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '14px', color: 'var(--th-text-secondary)', lineHeight: '1.8' }}>
             {this.state.error.message}
           </pre>
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '11px', color: '#52525b', marginTop: '20px', lineHeight: '1.6' }}>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: '11px', color: 'var(--th-text-tertiary)', marginTop: '20px', lineHeight: '1.6' }}>
             {this.state.error.stack}
           </pre>
         </div>

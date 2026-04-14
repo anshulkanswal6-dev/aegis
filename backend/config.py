@@ -22,6 +22,10 @@ DEFAULT_PLANNING_MODEL = os.getenv("DEFAULT_PLANNING_MODEL", "gemini_flash")
 DEFAULT_CODEGEN_MODEL = os.getenv("DEFAULT_CODEGEN_MODEL", "gemini_flash")
 
 # --- Notifications (Infrastructure) ---
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+
+# Legacy SMTP (to be deprecated)
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -91,7 +95,7 @@ def check_env_vars():
         "TELEGRAM_BOT_TOKEN": bool(TELEGRAM_BOT_TOKEN),
         "SUPABASE_KEY": bool(SUPABASE_KEY),
         "EXECUTOR_PRIVATE_KEY": bool(EXECUTOR_PRIVATE_KEY),
-        "SMTP_AUTH": bool(SMTP_USER and SMTP_PASS),
+        "RESEND_CONFIG": bool(RESEND_API_KEY),
         "RPC_URL": bool(RPC_URL),
         "FACTORY_ADDR": bool(AGENT_WALLET_FACTORY_ADDRESS),
         "CHAIN_NAME": CHAIN_NAME,
@@ -103,7 +107,7 @@ def check_env_vars():
 check_env_vars()
 
 # Subsystem Status Flags
-SMTP_CONFIG_READY = bool(SMTP_USER and SMTP_PASS)
+EMAIL_CONFIG_READY = bool(RESEND_API_KEY)
 TELEGRAM_CONFIG_READY = bool(TELEGRAM_BOT_TOKEN)
 SUPABASE_CONFIG_READY = bool(SUPABASE_URL and SUPABASE_KEY)
 BLOCKCHAIN_CONFIG_READY = bool(EXECUTOR_PRIVATE_KEY and RPC_URL)
@@ -117,7 +121,7 @@ def get_system_report():
             "chain_id": CHAIN_ID
         },
         "features": {
-            "email": SMTP_CONFIG_READY,
+            "email": EMAIL_CONFIG_READY,
             "telegram": TELEGRAM_CONFIG_READY,
             "storage": STORE_BACKEND if SUPABASE_CONFIG_READY else "memory",
             "execution": BLOCKCHAIN_CONFIG_READY
@@ -140,11 +144,11 @@ def validate_config():
         ("Supabase", SUPABASE_CONFIG_READY),
         ("Blockchain", BLOCKCHAIN_CONFIG_READY),
         ("Telegram", TELEGRAM_CONFIG_READY),
-        ("SMTP/Email", SMTP_CONFIG_READY),
+        ("Resend/Email", EMAIL_CONFIG_READY),
     ]
     
     for label, active in infra:
-        status = "✅ READY" if active else "❌ DISABLED / MISSING"
+        status = "[READY]" if active else "[DISABLED / MISSING]"
         print(f"  {label.ljust(15)}: {status}")
         if not active:
             report.append(label)

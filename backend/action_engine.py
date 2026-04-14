@@ -497,8 +497,8 @@ def _format_notify_error(channel: str, error: str) -> str:
             return "Telegram not linked. Please go to the Integrations tab and link your account."
         if error == "missing_chat_id":
             return "Telegram chat ID missing. Try unlinking and relinking your account."
-    if channel == "email" and error == "SMTP not configured":
-        return "Email system not configured on backend."
+    if channel == "email" and error == "Resend not configured":
+        return "Email system (Resend) not configured on backend."
     return f"Failed to send {channel} notification: {error}"
 
 

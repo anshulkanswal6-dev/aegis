@@ -656,11 +656,7 @@ Generate these files and return them as a JSON object (filename: content):
           "channels": ["telegram"],
           "telegram": {{ "message": "The automation triggered successfully!" }},
           "email": {{ "to": "...", "subject": "...", "body": "..." }}
-        }},
-        "runtime": {{ "interval_seconds": 30 }}
-      }}
-
-4. "README.md" (Manual Setup Guide):
+   4. "README.md" (Manual Setup Guide):
    - MUST clearly list manual configuration steps.
    - MUST highlight which fields in `config.json` need to be replaced by the user (DEX router, specific contract addresses, etc.).
    - Explain that the automation uses the **Agent Wallet** (Smart Contract) as the sender.
@@ -670,7 +666,10 @@ Generate these files and return them as a JSON object (filename: content):
     - Only include placeholders for **user-level** variables (e.g., specific recipient addresses or custom thresholds).
     - DO NOT include placeholders for SMTP, Supabase, or Telegram bot tokens.
 
-IMPORTANT: Do not generate misleading "fully working" code for protocols we don't have built-in APIs for. Use clear placeholders. RETURN ONLY VALID JSON."""
+IMPORTANT:
+- TRIGGER PARAMS: For 'wallet_balance_below', YOU MUST include 'wallet_address', 'threshold', and 'token' inside 'trigger.params'.
+- ZERO MISPLACEMENT: Do NOT put 'wallet_address' or 'threshold' in a separate 'wallet' or 'params' block outside the trigger.
+- Do not generate misleading "fully working" code for protocols we don't have built-in APIs for. Use clear placeholders. RETURN ONLY VALID JSON."""
 
         if cfg["provider"] == "gemini":
             raw_text = self._gemini_complete_text(code_prompt, {}, cfg)
@@ -679,44 +678,63 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
 
         try:
             files = self._extract_json(raw_text)
-            if files and isinstance(files, dict):
-                # Programmatic Normalization: 
-                # If chain is unknown but mon/monad is mentioned, force Monad Testnet.
-                config_json = files.get("config.json")
+            if files and isinstance(files, dict) and "config.json" in files:
+                config_json = files["config.json"]
                 if isinstance(config_json, str):
                     try:
                         config_data = json.loads(config_json)
-                        chain_info = config_data.get("chain", {})
-                        params = config_data.get("trigger", {}).get("params", {})
-                        token = str(params.get("token", "")).lower()
-                        asset = str(params.get("asset", "")).lower()
                         
-                        # Inject missing fields that the agent collected but Gemini might have omitted in config.json
-                        if not params.get("wallet_address") and fields.get("wallet_address"):
-                            if "trigger" not in config_data: config_data["trigger"] = {"type": "unknown", "params": {}}
-                            if "params" not in config_data["trigger"]: config_data["trigger"]["params"] = {}
-                            config_data["trigger"]["params"]["wallet_address"] = fields["wallet_address"]
+                        # 1. Ensure Trigger structure exists
+                        if "trigger" not in config_data or not isinstance(config_data["trigger"], dict):
+                            config_data["trigger"] = {"type": trigger_type, "params": {}}
+                        if "params" not in config_data["trigger"] or not isinstance(config_data["trigger"]["params"], dict):
+                            config_data["trigger"]["params"] = {}
                         
-                        if not params.get("threshold") and fields.get("threshold"):
-                           if "trigger" not in config_data: config_data["trigger"] = {"type": "unknown", "params": {}}
-                           if "params" not in config_data["trigger"]: config_data["trigger"]["params"] = {}
-                           config_data["trigger"]["params"]["threshold"] = fields["threshold"]
+                        tr_params = config_data["trigger"]["params"]
+                        tr_type = config_data["trigger"].get("type", trigger_type)
 
-                        # Broad Normalization: Use platform default if Monad mentioned OR if unknown
+                        # 2. Hoist MISPLACED fields from top-level "wallet" or "params"
+                        misplaced_sources = [config_data.get("wallet", {}), config_data.get("params", {}), fields]
+                        for src in misplaced_sources:
+                            if not isinstance(src, dict): continue
+                            for k in ["wallet_address", "threshold", "token", "asset", "date", "time", "timezone"]:
+                                if k in src and not tr_params.get(k):
+                                    tr_params[k] = src[k]
+
+                        # 3. CRITICAL VALIDATION: wallet_balance_below rules
+                        if tr_type == "wallet_balance_below":
+                            if not tr_params.get("wallet_address") and fields.get("wallet_address"):
+                                tr_params["wallet_address"] = fields["wallet_address"]
+                            if not tr_params.get("threshold") and fields.get("threshold"):
+                                tr_params["threshold"] = fields["threshold"]
+                            
+                            # Clean "threshold" - must be numeric
+                            if tr_params.get("threshold"):
+                                try:
+                                    tr_params["threshold"] = float(str(tr_params["threshold"]).replace("MON", "").strip())
+                                except: pass
+
+                        # 4. Chain Normalization
+                        chain_info = config_data.get("chain", {})
+                        token = str(tr_params.get("token", "")).lower()
+                        asset = str(tr_params.get("asset", "")).lower()
+                        
                         needs_platform_default = (
                             token in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or 
                             asset in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or
                             chain_info.get("name") == "unknown" or
                             not chain_info.get("rpc")
                         )
-
                         if needs_platform_default:
-                            config_data["chain"] = {
-                                "name": config.CHAIN_NAME,
-                                "rpc": config.RPC_URL
-                            }
-                        
-                        # Re-sync files with updated config_data
+                            config_data["chain"] = {"name": config.CHAIN_NAME, "rpc": config.RPC_URL}
+
+                        # 5. REMOVE Misplaced Top-Level Blocks (per user request)
+                        config_data.pop("wallet", None)
+                        if "params" in config_data and config_data["params"] == fields:
+                             # Only remove if it's the raw fields block we passed in
+                             config_data.pop("params", None)
+
+                        # Re-sync files
                         files["config.json"] = json.dumps(config_data, indent=2)
                     except Exception as e:
                         print(f"[AEGIS Normalization Warning] {e}")

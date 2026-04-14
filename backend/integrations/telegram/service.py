@@ -4,9 +4,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import config
+
 class TelegramService:
     def __init__(self):
-        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.bot_token = config.TELEGRAM_BOT_TOKEN
         self.api_url = f"https://api.telegram.org/bot{self.bot_token}"
 
     def send_message(self, chat_id: str, text: str, parse_mode: str = "HTML") -> bool:

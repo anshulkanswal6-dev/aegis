@@ -1,6 +1,6 @@
 import { ConnectKitButton } from 'connectkit';
 import { useAccount, useChainId, useSwitchChain } from 'wagmi';
-import { MONAD_TESTNET_ID } from '../../lib/config/chains';
+import { BRANDING } from '../../lib/config/branding';
 
 import { Button } from '../ui/UIPack';
 import { Wallet, ShieldCheck, ArrowRight } from 'lucide-react';
@@ -10,7 +10,7 @@ export function ConnectWalletCard() {
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
 
-  const isWrongChain = isConnected && address && chainId !== MONAD_TESTNET_ID;
+  const isWrongChain = isConnected && address && chainId !== BRANDING.chainId;
 
   if (isConnected && address && !isWrongChain) return null;
 
@@ -30,10 +30,10 @@ export function ConnectWalletCard() {
         <div className="grid grid-cols-1 gap-3">
           {isWrongChain ? (
             <Button
-              onClick={() => switchChain({ chainId: MONAD_TESTNET_ID })}
+              onClick={() => switchChain({ chainId: BRANDING.chainId })}
               className="w-full h-12 rounded-xl text-[10px] font-bold uppercase tracking-widest bg-[#FF4D4D] hover:bg-rose-600 text-white transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-200 dark:shadow-rose-500/10"
             >
-              Switch to Monad Testnet
+              Switch to {BRANDING.networkName}
               <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           ) : (

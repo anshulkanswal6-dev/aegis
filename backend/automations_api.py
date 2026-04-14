@@ -68,13 +68,13 @@ async def startup_worker():
         SYSTEM_STATUS["worker"] = f"error: {str(e)}"
 
     # 2. Start Telegram Poller (Lazy)
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if token:
+    import config
+    if config.TELEGRAM_BOT_TOKEN:
         try:
             from integrations.telegram.poller import _poller
             start_telegram_poller()
             SYSTEM_STATUS["telegram"] = "connected"
-            print(f"[AEGIS API] Telegram Poller active (@{os.getenv('TELEGRAM_BOT_USERNAME', 'unknown')})")
+            print(f"[AEGIS API] Telegram Poller active (@{config.TELEGRAM_BOT_USERNAME or 'unknown'})")
         except Exception as e:
             print(f"[AEGIS API] ERROR starting Telegram Poller: {e}")
             SYSTEM_STATUS["telegram"] = "error"

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useAgentWallet } from '../../hooks/useAgentWallet';
 import { useAccount, useChainId, useDisconnect } from 'wagmi';
-import { MONAD_TESTNET_ID } from '../../lib/config/chains';
 import { cn } from '../../lib/utils/cn';
 import { User, LogOut, ChevronDown, Copy, Check } from 'lucide-react';
 import { ThemeToggle } from '../ui/UIPack';
 import { useNavigate } from 'react-router-dom';
 
 import logoPng from '../../assets/Copy of AEGIS (640 x 640 px) (1).png';
+
+import { BRANDING } from '../../lib/config/branding';
 
 export function GlobalHeader() {
   const { isConnected, address } = useAccount();
@@ -28,7 +29,7 @@ export function GlobalHeader() {
   // Show only if connected and has an agent wallet initialized
   if (!isConnected || !agentWalletAddress) return null;
 
-  const isCorrectChain = chainId === MONAD_TESTNET_ID;
+  const isCorrectChain = chainId === BRANDING.chainId;
 
   return (
     <div className="absolute top-6 right-8 z-[100] flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-500">
@@ -48,7 +49,7 @@ export function GlobalHeader() {
           isCorrectChain ? "bg-emerald-500" : "bg-rose-500"
         )} />
         <span className="text-[10px] font-bold th-text tracking-widest uppercase">
-          {isCorrectChain ? 'Monad Testnet' : 'Wrong Network'}
+          {isCorrectChain ? BRANDING.networkName : 'Wrong Network'}
         </span>
       </div>
 

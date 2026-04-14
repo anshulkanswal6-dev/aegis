@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProjectStore } from '../store/projectStore';
 import { Button } from '../components/ui/UIPack';
 import { cn } from '../lib/utils/cn';
-import { MONAD_TESTNET_ID } from '../lib/config/chains';
+import { BRANDING } from '../lib/config/branding';
 import { GlobalHeader } from '../components/layout/Header';
 
 import logoPng from '../assets/Copy of AEGIS (640 x 640 px) (1).png';
@@ -45,13 +45,13 @@ export default function LandingPage() {
       return status;
    };
 
-   const isCorrectChain = chainId === MONAD_TESTNET_ID;
+   const isCorrectChain = chainId === BRANDING.chainId;
    const currentStep = (!isConnected || !address || !isCorrectChain) ? 1 : !agentWalletAddress ? 2 : ethBalance === 0n ? 3 : 4;
 
    const steps = [
-      { number: 1, title: 'Connect Wallet', description: 'Authorize your node session.' },
+      { number: 1, title: 'Connect Wallet', description: `Authorize your ${BRANDING.siteName} session on ${BRANDING.networkName}.` },
       { number: 2, title: 'Create Agent', description: 'Initialize your on-chain worker.' },
-      { number: 3, title: 'Fund Account', description: 'Enable autonomous transactions.' },
+      { number: 3, title: 'Fund Account', description: `Enable transactions with ${BRANDING.currencySymbol}.` },
       { number: 4, title: 'Ready to Build', description: 'Launch your first automation.' },
    ];
 

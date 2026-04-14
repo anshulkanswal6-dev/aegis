@@ -11,9 +11,7 @@ import os
 import traceback
 from typing import Any, Callable, Dict, List, Optional
 
-from action_engine import ActionEngine, ActionContext
-from config import DEFAULT_RPC_URL, DEFAULT_CHAIN
-
+import config
 
 # Shared engine instance
 _action_engine = ActionEngine()
@@ -53,9 +51,9 @@ def execute_actions(
     top_params = spec_json.get("params", {})
     merged = {**top_params, **trigger_params}
 
-    chain = chain_info.get("name") or merged.get("chain", DEFAULT_CHAIN)
-    rpc_url = chain_info.get("rpc") or merged.get("rpc_url", DEFAULT_RPC_URL) or os.getenv("RPC_URL", "")
-    wallet_address = wallet_info.get("address") or merged.get("wallet_address", "") or os.getenv("WALLET_ADDRESS", "")
+    chain = chain_info.get("name") or merged.get("chain") or config.CHAIN_NAME
+    rpc_url = chain_info.get("rpc") or merged.get("rpc_url") or config.RPC_URL
+    wallet_address = wallet_info.get("address") or merged.get("wallet_address", "")
 
     ctx = ActionContext(
         chain=chain,
@@ -64,7 +62,7 @@ def execute_actions(
         automation_id=automation_id,
         owner_id=owner_id,
         project_name=project_name or spec_json.get("project_name"),
-        secrets={"private_key": os.getenv("PRIVATE_KEY", "")},
+        secrets={"private_key": config.EXECUTOR_PRIVATE_KEY},
         memory={},
     )
 

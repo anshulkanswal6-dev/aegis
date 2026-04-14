@@ -6,8 +6,9 @@ from web3 import Web3
 from dotenv import load_dotenv
 load_dotenv()
 
-# Monad Testnet
-w3 = Web3(Web3.HTTPProvider('https://testnet-rpc.monad.xyz'))
+# Network Setup
+rpc_url = os.getenv('RPC_URL', 'https://testnet-rpc.monad.xyz')
+w3 = Web3(Web3.HTTPProvider(rpc_url))
 executor_key = os.getenv('EXECUTOR_PRIVATE_KEY')
 executor_account = w3.eth.account.from_key(executor_key)
 

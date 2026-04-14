@@ -9,6 +9,8 @@ import { Navigate } from 'react-router-dom';
 import { ShieldCheck, Database, LayoutDashboard, Terminal } from 'lucide-react';
 import { Button } from '../components/ui/UIPack';
 
+import { BRANDING } from '../lib/config/branding';
+
 export default function WalletPage() {
   const { isConnected } = useAccount();
   const { agentWalletAddress } = useAgentWallet();
@@ -86,7 +88,7 @@ export default function WalletPage() {
               </div>
               <div className="flex items-center gap-2">
                  <Database className="w-4 h-4 th-text-tertiary" />
-                 <span className="text-[11px] font-bold th-text-tertiary uppercase tracking-wider">Network: Monad Testnet</span>
+                 <span className="text-[11px] font-bold th-text-tertiary uppercase tracking-wider">Network: {BRANDING.networkName}</span>
               </div>
            </div>
            <span className="text-[10px] font-bold th-text-tertiary uppercase tracking-[0.3em]">AEGIS PLATFORM V1.0.4-BETA</span>
@@ -95,4 +97,3 @@ export default function WalletPage() {
     </div>
   );
 }
-

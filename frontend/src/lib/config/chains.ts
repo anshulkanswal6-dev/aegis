@@ -1,5 +1,7 @@
-export const MONAD_TESTNET_ID = 10143;
+import { BRANDING } from './branding';
+
+export const PLATFORM_CHAIN_ID = BRANDING.chainId;
 
 export const EXPLORER_URLS: Record<number, string> = {
-  [MONAD_TESTNET_ID]: 'https://testnet.monadexplorer.com',
+  [PLATFORM_CHAIN_ID]: BRANDING.explorerUrl,
 };

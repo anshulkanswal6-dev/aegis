@@ -4,15 +4,21 @@ import { injected } from 'wagmi/connectors';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode } from 'react';
 
-const monadTestnet = defineChain({
-  id: 10143,
-  name: 'Monad Testnet',
-  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+import { BRANDING } from '../lib/config/branding';
+
+const platformChain = defineChain({
+  id: BRANDING.chainId,
+  name: BRANDING.networkName,
+  nativeCurrency: { 
+    name: BRANDING.currencySymbol, 
+    symbol: BRANDING.currencySymbol, 
+    decimals: 18 
+  },
   rpcUrls: {
-    default: { http: ['https://testnet-rpc.monad.xyz'] },
+    default: { http: [BRANDING.rpcUrl] },
   },
   blockExplorers: {
-    default: { name: 'MonadExplorer', url: 'https://testnet.monadexplorer.com' },
+    default: { name: 'Explorer', url: BRANDING.explorerUrl },
   },
   testnet: true,
 });
@@ -47,10 +53,10 @@ const config = createConfig({
   storage: createStorage({
     storage: getSafeStorage(),
   }),
-  chains: [monadTestnet],
+  chains: [platformChain],
   connectors: [injected()],
   transports: {
-    [monadTestnet.id]: http(),
+    [platformChain.id]: http(),
   },
 });
 

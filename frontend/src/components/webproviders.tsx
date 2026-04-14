@@ -4,17 +4,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConnectKitProvider, getDefaultConfig } from "connectkit";
 import React, { useMemo } from 'react';
 
-const WALLETCONNECT_PROJECT_ID = "d802ecff1840858c5e070532b09ca450";
+const WALLETCONNECT_PROJECT_ID = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "d802ecff1840858c5e070532b09ca450";
 
-const monadTestnet = defineChain({
-  id: 10143,
-  name: 'Monad Testnet',
-  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+import { BRANDING } from '../lib/config/branding';
+
+const platformChain = defineChain({
+  id: BRANDING.chainId,
+  name: BRANDING.networkName,
+  nativeCurrency: { 
+    name: BRANDING.currencySymbol, 
+    symbol: BRANDING.currencySymbol, 
+    decimals: 18 
+  },
   rpcUrls: {
-    default: { http: ['https://testnet-rpc.monad.xyz'] },
+    default: { http: [BRANDING.rpcUrl] },
   },
   blockExplorers: {
-    default: { name: 'MonadExplorer', url: 'https://testnet.monadexplorer.com' },
+    default: { name: 'Explorer', url: BRANDING.explorerUrl },
   },
   testnet: true,
 });
@@ -46,12 +52,12 @@ export const Web3Provider = ({ children }: { children: React.ReactNode }) => {
     try {
       return createConfig(
         getDefaultConfig({
-          chains: [monadTestnet],
+          chains: [platformChain],
           walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
-          appName: "AEGIS",
-          appDescription: "Build on-chain agents with ease",
-          appUrl: "https://aegis.automation",
-          appIcon: "https://aegis.automation/logo.png",
+          appName: BRANDING.siteName,
+          appDescription: BRANDING.tagline,
+          appUrl: import.meta.env.VITE_APP_URL || "https://aegis.automation",
+          appIcon: import.meta.env.VITE_APP_ICON || "https://aegis.automation/logo.png",
           storage: createStorage({
             storage: getSafeStorage(),
           }),
@@ -60,8 +66,8 @@ export const Web3Provider = ({ children }: { children: React.ReactNode }) => {
     } catch (e) {
       console.warn("[Web3Provider] Caught initialization error.", e);
       return createConfig({
-        chains: [monadTestnet],
-        transports: { [monadTestnet.id]: http('https://testnet-rpc.monad.xyz') },
+        chains: [platformChain],
+        transports: { [platformChain.id]: http(BRANDING.rpcUrl) },
         storage: createStorage({ storage: getSafeStorage() }),
       });
     }

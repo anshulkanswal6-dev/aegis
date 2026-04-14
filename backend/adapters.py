@@ -13,16 +13,18 @@ from typing import Optional
 env_path = Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
+import config
+
 class NotificationAdapter:
     # In-memory cooldown cache: {automation_id: timestamp}
     _last_sent_cache = {}
     COOLDOWN_SECONDS = 300  # 5 minutes
 
     def __init__(self):
-        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_user = os.getenv("SMTP_USER")
-        self.smtp_password = os.getenv("SMTP_PASS")
+        self.smtp_server = config.SMTP_SERVER
+        self.smtp_port = config.SMTP_PORT
+        self.smtp_user = config.SMTP_USER
+        self.smtp_password = config.SMTP_PASS
 
     def send_email(self, to_email: str, subject: str, body: str, automation_id: str = "unknown", wallet: str = "unknown", cooldown: Optional[int] = None, project_name: str = ""):
         # 1. Safety Check: Config missing

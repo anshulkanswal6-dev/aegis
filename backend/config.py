@@ -12,55 +12,47 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =========================================================
-# Paths
+# Platform / Admin Credentials (INTERNAL ONLY)
 # =========================================================
-BASE_DIR = Path(__file__).parent.resolve()
-RUNTIME_DATA_DIR = BASE_DIR / ".runtime_data"
 
-# =========================================================
-# Runtime Store Backend
-# =========================================================
+# --- AI Engine ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+DEFAULT_PLANNING_MODEL = os.getenv("DEFAULT_PLANNING_MODEL", "gemini_flash")
+DEFAULT_CODEGEN_MODEL = os.getenv("DEFAULT_CODEGEN_MODEL", "gemini_flash")
+
+# --- Notifications (Infrastructure) ---
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASS = os.getenv("SMTP_PASS")
+
+# --- Blockchain / Monad (Platform Defaults) ---
+RPC_URL = os.getenv("RPC_URL", "https://testnet-rpc.monad.xyz")
+EXPLORER_URL = os.getenv("EXPLORER_URL", "https://testnet.monadexplorer.com")
+CHAIN_ID = int(os.getenv("CHAIN_ID", "10143"))
+CHAIN_NAME = os.getenv("CHAIN_NAME", "Monad Testnet")
+CURRENCY_SYMBOL = os.getenv("CURRENCY_SYMBOL", "MON")
+
+# --- Smart Contracts ---
+AGENT_WALLET_FACTORY_ADDRESS = os.getenv("AGENT_WALLET_FACTORY_ADDRESS", "0x8cbb60c06569E93a2A0AE09bc00988f62753E73E")
+PLATFORM_EXECUTOR_ADDRESS = os.getenv("EXECUTOR_ADDRESS", "0xf7C7FfEdc58B49C75C56019710B2C5C597C5E29E")
+
+# --- Execution Node ---
+# This key is used by the backend worker to sign transactions
+EXECUTOR_PRIVATE_KEY = os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")
+
+# --- Storage (Supabase Admin) ---
 # Options: "memory", "json_file", "supabase"
-STORE_BACKEND = os.getenv("STORE_BACKEND") or os.getenv("AEGIS_STORE_BACKEND") or "json_file"
-
-# Supabase Credentials (only used when STORE_BACKEND == "supabase")
+STORE_BACKEND = os.getenv("STORE_BACKEND") or "supabase"
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "") # Should be Service Role Key
 
-# Path for the JSON-file store (only used when STORE_BACKEND == "json_file")
-STORE_JSON_PATH = RUNTIME_DATA_DIR / "automations.json"
-LOGS_JSON_PATH = RUNTIME_DATA_DIR / "logs.json"
-TERMINAL_LOGS_JSON_PATH = RUNTIME_DATA_DIR / "terminal_logs.json"
-
-# =========================================================
-# Scheduler / Polling
-# =========================================================
-# How often (seconds) the worker polls monitoring-type automations
-POLLING_INTERVAL_SECONDS = int(os.getenv("AEGIS_POLL_INTERVAL", "30"))
-
-# Default interval for scheduled automations when none is specified
-DEFAULT_SCHEDULE_INTERVAL_SECONDS = int(os.getenv("AEGIS_DEFAULT_INTERVAL", "60"))
-
-# Maximum number of logs kept per automation (ring buffer)
-MAX_LOGS_PER_AUTOMATION = int(os.getenv("AEGIS_MAX_LOGS", "200"))
-
-# =========================================================
-# Worker
-# =========================================================
-# Whether the background worker auto-starts with the API server
-WORKER_AUTOSTART = os.getenv("AEGIS_WORKER_AUTOSTART", "true").lower() == "true"
-
-# =========================================================
-# Demo Flags
-# =========================================================
-# When True, triggers use mock/stub data (already the default in trigger_engine)
-DEMO_MODE = os.getenv("AEGIS_DEMO_MODE", "true").lower() == "true"
-
-# =========================================================
-# RPC defaults (used by execution_service when spec doesn't provide one)
-# =========================================================
-DEFAULT_RPC_URL = os.getenv("RPC_URL", "https://testnet-rpc.monad.xyz")
-DEFAULT_CHAIN = os.getenv("DEFAULT_CHAIN", "monad-testnet")
+# --- Telegram Bot ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "Aegis_telebot")
+TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
 # =========================================================
 # System Status Tracking
@@ -77,11 +69,14 @@ SYSTEM_STATUS = {
 def check_env_vars():
     """Build a map of critical environment variables for health checks."""
     vars_to_check = {
-        "GEMINI_API_KEY": bool(os.getenv("GEMINI_API_KEY")),
-        "TELEGRAM_BOT_TOKEN": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
-        "SUPABASE_KEY": bool(os.getenv("SUPABASE_KEY")),
-        "EXECUTOR_PRIVATE_KEY": bool(os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")),
-        "RPC_URL": bool(os.getenv("RPC_URL")),
+        "GEMINI_API_KEY": bool(GEMINI_API_KEY),
+        "TELEGRAM_BOT_TOKEN": bool(TELEGRAM_BOT_TOKEN),
+        "SUPABASE_KEY": bool(SUPABASE_KEY),
+        "EXECUTOR_PRIVATE_KEY": bool(EXECUTOR_PRIVATE_KEY),
+        "SMTP_AUTH": bool(SMTP_USER and SMTP_PASS),
+        "RPC_URL": bool(RPC_URL),
+        "FACTORY_ADDR": bool(AGENT_WALLET_FACTORY_ADDRESS),
+        "CHAIN_NAME": CHAIN_NAME,
     }
     SYSTEM_STATUS["env_vars"] = vars_to_check
     return vars_to_check

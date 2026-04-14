@@ -12,6 +12,8 @@ import {
 import { useAgentWallet } from '../../hooks/useAgentWallet';
 import { cn } from '../../lib/utils/cn';
 import { useState, useRef, useEffect } from 'react';
+import { BRANDING } from '../../lib/config/branding';
+
 
 export function AgentChatPanel() {
   const { toggleChat } = useLayoutStore();
@@ -190,7 +192,7 @@ export function AgentChatPanel() {
                   <Bot className="w-8 h-8" />
                </div>
                <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">GMONAD!</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em]">{BRANDING.networkName.toUpperCase()}!</p>
                   <p className="text-[11px] font-medium italic max-w-[200px]">Tell me what you want to automate — I'll handle the rest.</p>
                </div>
             </div>

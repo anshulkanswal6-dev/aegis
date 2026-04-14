@@ -102,7 +102,8 @@ class GenAIAgent:
     # ==========================================================
     def _build_system_prompt(self) -> str:
         """Build a rich system prompt that includes all triggers and actions from catalogues."""
-        project_context = "" # Default empty for base prompt
+        import config
+        project_context = f"PLATFORM_CONTEXT: The current platform default chain is '{config.CHAIN_NAME}' (Currency: {config.CURRENCY_SYMBOL})."
 
         # Build trigger descriptions
         trigger_list = []
@@ -177,12 +178,14 @@ In your final generated JSON code for `config.json`, use this structure:
 ```
 Do NOT place notification fields inside the `actions` array.
 
-## IMPORTANT: PROTOCOL INTEGRATIONS
-We are a platform that generates actual on-chain automation projects. We are NOT directly integrated with every protocol’s backend API yet.
-When a user asks for actions like swaps, NFT mints, faucet claims, or marketplace actions, you MUST:
-1. Be honest: Tell them you can build the automation node, but they will need to provide specific configuration like contract addresses or router addresses.
-2. Ask for missing technical fields: If they haven't provided fields like "router_address", "token_address", "nft_contract", or "faucet_url", ask for them during the conversation to make the generated project more "ready-to-run".
-3. NEVER block generation: If a field is unknown, proceed with the plan but mention that there will be a clear "// TODO" placeholder in the generated code for them to fill in later.
+## IMPORTANT: INFRASTRUCTURE & CREDENTIALS (CRITICAL)
+- **ZERO-SECRET POLICY**: NEVER ask for or include infrastructure secrets like `SMTP_PASS`, `TELEGRAM_BOT_TOKEN`, `SUPABASE_KEY`, or `PRIVATE_KEY` in the conversation or generated files.
+- **PLATFORM-MANAGED**: The AEGIS platform handles all email delivery, Telegram routing, and blockchain execution using **Admin Credentials** stored in the secure host environment (Render).
+- **USER INPUTS ONLY**: In your plan and code, only focus on **User Inputs**:
+    - Notifications: `to` (email), `subject`, `message`, `cooldown`.
+    - Transactions: `recipient_address`, `amount`, `thresholds`.
+    - Blockchain: You do NOT need to ask for RPC URLs or Chain IDs unless the user wants a non-Monad chain. Default to {config.CHAIN_NAME} infrastructure.
+- **GENERATED CODE**: The generated `main.py` and `config.json` should NOT expect a `.env` with platform secrets. They should rely on the platform's internal `adapters` and `config` which pull from the admin env.
 
 ## HOW TO RESPOND
 
@@ -639,7 +642,7 @@ Generate these files and return them as a JSON object (filename: content):
         3. "config.json" (Runtime Configuration):
     - A runtime-ready JSON structure using nested objects for clarity.
     - Project Name: "{fields.get('name', 'Automation Project')}"
-    - CHAIN & RPC: If 'mon' or 'monad' is mentioned, YOU MUST set chain.name to "Monad Testnet" and chain.rpc to "https://testnet-rpc.monad.xyz".
+    - CHAIN & RPC: If 'mon' or 'monad' is mentioned, YOU MUST set chain.name to "{config.CHAIN_NAME}" and chain.rpc to "{config.RPC_URL}".
     - ACTIONS: Include ALL requested actions: {json.dumps(action_types)}.
     - MUST CLEAN ACTION PARAMS: Only include fields relevant to each specific action. For 'send_native_token', ONLY include 'recipient_address' and 'amount'. For 'send_email_notification', ONLY include 'to', 'subject', and 'message'. Do NOT put trigger-only fields like 'date' or 'timezone' into action params.
     - DATES: Use the extracted 'date' and 'time' for the trigger. If 'date' is 'today', keep it as 'today' (the engine now resolves this).
@@ -662,9 +665,9 @@ Generate these files and return them as a JSON object (filename: content):
    - Explain that the automation uses the **Agent Wallet** (Smart Contract) as the sender.
    - Do NOT instruct the user to enter their private key in the Chat; only mention it in the readme as a local environment setup for the executor node if absolutely necessary.
 
-5. "requirements.txt" & ".env.example":
-    - web3, requests, python-dotenv, schedule.
-    - .env.example should NOT include placeholders that encourage sharing keys in the UI.
+5. ".env.example":
+    - Only include placeholders for **user-level** variables (e.g., specific recipient addresses or custom thresholds).
+    - DO NOT include placeholders for SMTP, Supabase, or Telegram bot tokens.
 
 IMPORTANT: Do not generate misleading "fully working" code for protocols we don't have built-in APIs for. Use clear placeholders. RETURN ONLY VALID JSON."""
 
@@ -687,18 +690,19 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
                         token = str(params.get("token", "")).lower()
                         asset = str(params.get("asset", "")).lower()
                         
-                        # Broad Normalization: Force Monad if mentioned OR if name is unknown OR if rpc is empty
-                        needs_monad = (
-                            token in ["mon", "monad"] or 
-                            asset in ["mon", "monad"] or
+                        # Broad Normalization: Use platform default if Monad mentioned OR if unknown
+                        import config
+                        needs_platform_default = (
+                            token in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or 
+                            asset in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or
                             chain_info.get("name") == "unknown" or
                             not chain_info.get("rpc")
                         )
                         
-                        if needs_monad:
+                        if needs_platform_default:
                             config_data["chain"] = {
-                                "name": "Monad Testnet",
-                                "rpc": "https://testnet-rpc.monad.xyz"
+                                "name": config.CHAIN_NAME,
+                                "rpc": config.RPC_URL
                             }
                             files["config.json"] = json.dumps(config_data, indent=2)
                     except Exception:
@@ -927,13 +931,15 @@ if __name__ == "__main__":
                 }
 
         # 2. Recover Chain if unknown
-        chain_name = session.get("known_fields", {}).get("chain_name", "Monad Testnet")
-        chain_rpc = session.get("known_fields", {}).get("rpc_url", "https://testnet-rpc.monad.xyz")
+        import config
+        chain_name = session.get("known_fields", {}).get("chain_name", config.CHAIN_NAME)
+        chain_rpc = session.get("known_fields", {}).get("rpc_url", config.RPC_URL)
         
-        # Broad Normalization for Monad
-        if "mon" in str(all_params).lower() or "monad" in str(all_params).lower():
-            chain_name = "Monad Testnet"
-            chain_rpc = "https://testnet-rpc.monad.xyz"
+        # Broad Normalization for Platform Chain
+        ctx_lower = str(all_params).lower()
+        if "mon" in ctx_lower or config.CHAIN_NAME.lower() in ctx_lower:
+            chain_name = config.CHAIN_NAME
+            chain_rpc = config.RPC_URL
 
         action_types = [a.get("type", "unknown") if isinstance(a, dict) else str(a) for a in spec.get("actions", [])]
         if not action_types:

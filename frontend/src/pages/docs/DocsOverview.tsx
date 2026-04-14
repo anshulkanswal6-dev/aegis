@@ -4,6 +4,8 @@ import {
   BarChart3, Zap, Code2, Sparkles, Box, ChevronRight
 } from 'lucide-react';
 import { cn } from '../../lib/utils/cn';
+import { BRANDING } from '../../lib/config/branding';
+
 import { TerminalBlock, CodeSnippet, Line, Comment, Muted, Success, Warn, Keyword, Str, Fn, Num } from './components';
 
 const CARDS = [
@@ -116,9 +118,9 @@ export default function DocsOverview() {
         <TerminalBlock title="aegis-runtime --live">
           <Line prompt="[08:42:01]">Initialising evaluation cycle...</Line>
           <Line prompt="[08:42:01]" dim>Loading automation: <Str>"Vault Rebalancer"</Str></Line>
-          <Line prompt="[08:42:02]">Querying Monad RPC state...</Line>
+          <Line prompt="[08:42:02]">Querying {BRANDING.networkName} RPC state...</Line>
           <Line prompt="[08:42:03]">Trigger check: <Keyword>wallet_balance_below</Keyword></Line>
-          <Line prompt="[08:42:03]" dim>Current: 1.25 MON | Threshold: 5.0 MON</Line>
+          <Line prompt="[08:42:03]" dim>Current: 1.25 {BRANDING.currencySymbol} | Threshold: 5.0 {BRANDING.currencySymbol}</Line>
           <Line prompt="[08:42:03]"><Success>MATCH</Success> Trigger condition satisfied.</Line>
           <Line prompt="[08:42:04]" dim>Assembling action payload...</Line>
           <Line prompt="[08:42:05]">Executing: <Fn>dispatch_gas_refill</Fn>(target=<Str>"0x71...f2"</Str>)</Line>

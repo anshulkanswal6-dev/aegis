@@ -298,9 +298,9 @@
       "type": "incoming_transfer_detected",
       "category": "wallet",
       "python_handler": "trigger_incoming_transfer_detected",
-      "description": "Trigger when incoming transfer is detected.",
+      "description": "Trigger when an incoming payment is detected in the wallet. Supports {{amount}} and {{new_balance}} placeholders in notifications.",
       "required_fields": ["token"],
-      "optional_fields": ["minimum_amount"]
+      "optional_fields": ["minimum_amount", "threshold"]
     },
     {
       "type": "outgoing_transfer_detected",

@@ -706,23 +706,44 @@ IMPORTANT:
 
                         # 2. Hoist MISPLACED fields from top-level "wallet" or "params"
                         misplaced_sources = [config_data.get("wallet", {}), config_data.get("params", {}), fields]
+                        
+                        # Define relevant fields per trigger type to avoid hallucinating unrelated fields (like date/time on wallet triggers)
+                        relevant_fields = ["token", "asset", "wallet_address"] 
+                        if tr_type in ["wallet_balance_below", "wallet_balance_above", "incoming_transfer_detected"]:
+                            relevant_fields += ["threshold", "minimum_amount"]
+                        elif tr_type.startswith("run_") or "date" in tr_type:
+                            relevant_fields += ["date", "time", "timezone", "interval", "cron"]
+                        elif tr_type.startswith("token_price"):
+                            relevant_fields += ["threshold", "quote_currency", "price_source", "lower_bound", "upper_bound"]
+
                         for src in misplaced_sources:
                             if not isinstance(src, dict): continue
-                            for k in ["wallet_address", "threshold", "token", "asset", "date", "time", "timezone"]:
+                            for k in relevant_fields:
                                 if k in src and not tr_params.get(k):
                                     tr_params[k] = src[k]
 
-                        # 3. CRITICAL VALIDATION: wallet_balance_below rules
-                        if tr_type == "wallet_balance_below":
+                        # 3. CRITICAL VALIDATION: Wallet-Specific rules
+                        if tr_type in ["wallet_balance_below", "wallet_balance_above", "incoming_transfer_detected"]:
+                            # Force wallet consistency
                             if not tr_params.get("wallet_address") and fields.get("wallet_address"):
                                 tr_params["wallet_address"] = fields["wallet_address"]
-                            if not tr_params.get("threshold") and fields.get("threshold"):
-                                tr_params["threshold"] = fields["threshold"]
                             
-                            # Clean "threshold" - must be numeric
-                            if tr_params.get("threshold"):
+                            # Force token - payment triggers NEED this
+                            if not tr_params.get("token"):
+                                tr_params["token"] = fields.get("token") or "MON"
+
+                            # Threshold/Amount cleaning
+                            t_key = "minimum_amount" if tr_type == "incoming_transfer_detected" else "threshold"
+                            if not tr_params.get(t_key) and fields.get(t_key):
+                                tr_params[t_key] = fields[t_key]
+                            
+                            if tr_params.get(t_key):
                                 try:
-                                    tr_params["threshold"] = float(str(tr_params["threshold"]).replace("MON", "").strip())
+                                    # Clean and convert to float
+                                    val_str = str(tr_params[t_key])
+                                    for unit in ["MON", "ETH", "USDT"]:
+                                        val_str = val_str.replace(unit, "")
+                                    tr_params[t_key] = float(val_str.strip())
                                 except: pass
 
                         # 4. Chain Normalization

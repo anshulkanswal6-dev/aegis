@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
+import config
 import log_service
 
 # Load env from current directory
@@ -690,23 +691,35 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
                         token = str(params.get("token", "")).lower()
                         asset = str(params.get("asset", "")).lower()
                         
+                        # Inject missing fields that the agent collected but Gemini might have omitted in config.json
+                        if not params.get("wallet_address") and fields.get("wallet_address"):
+                            if "trigger" not in config_data: config_data["trigger"] = {"type": "unknown", "params": {}}
+                            if "params" not in config_data["trigger"]: config_data["trigger"]["params"] = {}
+                            config_data["trigger"]["params"]["wallet_address"] = fields["wallet_address"]
+                        
+                        if not params.get("threshold") and fields.get("threshold"):
+                           if "trigger" not in config_data: config_data["trigger"] = {"type": "unknown", "params": {}}
+                           if "params" not in config_data["trigger"]: config_data["trigger"]["params"] = {}
+                           config_data["trigger"]["params"]["threshold"] = fields["threshold"]
+
                         # Broad Normalization: Use platform default if Monad mentioned OR if unknown
-                        import config
                         needs_platform_default = (
                             token in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or 
                             asset in ["mon", "monad", config.CURRENCY_SYMBOL.lower()] or
                             chain_info.get("name") == "unknown" or
                             not chain_info.get("rpc")
                         )
-                        
+
                         if needs_platform_default:
                             config_data["chain"] = {
                                 "name": config.CHAIN_NAME,
                                 "rpc": config.RPC_URL
                             }
-                            files["config.json"] = json.dumps(config_data, indent=2)
-                    except Exception:
-                        pass
+                        
+                        # Re-sync files with updated config_data
+                        files["config.json"] = json.dumps(config_data, indent=2)
+                    except Exception as e:
+                        print(f"[AEGIS Normalization Warning] {e}")
                 
                 if any(k.endswith(('.py', '.json', '.txt', '.md')) for k in files.keys()):
                     return files
@@ -714,7 +727,7 @@ IMPORTANT: Do not generate misleading "fully working" code for protocols we don'
             pass
 
         # Fallback to template if parsing fails
-        return self._generate_workspace_files_fallback(spec, {})
+        return self._generate_workspace_files_fallback(spec, {"known_fields": fields})
 
     # ==========================================================
     # HELPERS
@@ -917,8 +930,14 @@ if __name__ == "__main__":
             trigger_params = {k: all_params[k] for k in ["date", "time", "timezone", "weekday", "day_of_month", "start_time", "end_time"] if k in all_params}
         # 1. Recover trigger if AI PLANNING failed but Fields are known
         all_params = session.get("known_fields", {})
-        trigger_type = spec.get("trigger", {}).get("type", "None") if spec.get("trigger") else "None"
-        trigger_params = spec.get("trigger", {}).get("params", {}) if spec.get("trigger") else {}
+        
+        raw_trigger = spec.get("trigger")
+        if isinstance(raw_trigger, dict):
+            trigger_type = raw_trigger.get("type", "None")
+            trigger_params = raw_trigger.get("params", {})
+        else:
+            trigger_type = str(raw_trigger) if raw_trigger else "None"
+            trigger_params = {}
         
         # Heuristic: If planning has "None" but we have balance params, recover!
         if trigger_type == "None":
@@ -929,9 +948,15 @@ if __name__ == "__main__":
                     "threshold": all_params.get("threshold") or 2,
                     "wallet_address": all_params.get("wallet_address") or session.get("wallet_address") or ""
                 }
+            else:
+                # Merge existing trigger params with known fields for persistence
+                trigger_params.update({
+                    "wallet_address": trigger_params.get("wallet_address") or all_params.get("wallet_address") or session.get("wallet_address") or "",
+                    "threshold": trigger_params.get("threshold") or all_params.get("threshold") or 2,
+                    "token": trigger_params.get("token") or all_params.get("token") or all_params.get("asset") or "MON"
+                })
 
         # 2. Recover Chain if unknown
-        import config
         chain_name = session.get("known_fields", {}).get("chain_name", config.CHAIN_NAME)
         chain_rpc = session.get("known_fields", {}).get("rpc_url", config.RPC_URL)
         

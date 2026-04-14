@@ -395,7 +395,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
         if (clean.endsWith('_MD')) clean = clean.replace(/_MD$/i, '.md');
         if (clean.endsWith('_PY')) clean = clean.replace(/_PY$/i, '.py');
         if (clean.endsWith('_JSON')) clean = clean.replace(/_JSON$/i, '.json');
-        return clean.toLowerCase();
+        return clean;
     };
 
     try {
@@ -547,7 +547,7 @@ export const usePlaygroundStore = create<PlaygroundState>((set, get) => ({
                 clean = parts.join('_') + '.' + ext;
             }
         }
-        return clean.toLowerCase();
+        return clean;
     };
 
     Object.entries(incomingFiles).forEach(([rawName, content]) => {
@@ -955,6 +955,7 @@ function handleCodeGenComplete(data: any) {
   const openFiles = [...store.openFiles];
 
   Object.entries(incoming).forEach(([name, data]) => {
+     // Use the original name for the node, but keep a flattened, safe ID for internal state
      const id = `file_${name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
      
      // Robust handle: data might be a string or an object with a .content property

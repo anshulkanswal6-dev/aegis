@@ -31,6 +31,11 @@ class Scheduler:
         self._scheduler: Optional[object] = None
         self._running = False
 
+    @property
+    def running(self) -> bool:
+        """Public accessor for scheduler running state."""
+        return self._running
+
     def start(self):
         """Start the scheduler."""
         if not HAS_APSCHEDULER:

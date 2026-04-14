@@ -55,6 +55,24 @@ TELEGRAM_WEBHOOK_URL = os.getenv("TELEGRAM_WEBHOOK_URL")
 TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET")
 
 # =========================================================
+# Runtime / Scheduling Defaults
+# =========================================================
+DEFAULT_CHAIN = CHAIN_NAME                       # alias used by runtime_service
+DEFAULT_RPC_URL = RPC_URL                        # alias used by runtime_service
+DEFAULT_SCHEDULE_INTERVAL_SECONDS = int(os.getenv("DEFAULT_SCHEDULE_INTERVAL_SECONDS", "60"))
+POLLING_INTERVAL_SECONDS = int(os.getenv("POLLING_INTERVAL_SECONDS", "30"))
+WORKER_AUTOSTART = os.getenv("WORKER_AUTOSTART", "true").lower() in ("true", "1", "yes")
+
+# =========================================================
+# Local JSON File Store Paths (fallback when STORE_BACKEND=json_file)
+# =========================================================
+RUNTIME_DATA_DIR = Path(os.getenv("RUNTIME_DATA_DIR", Path(__file__).parent / "runtime_data"))
+STORE_JSON_PATH = RUNTIME_DATA_DIR / "automations.json"
+LOGS_JSON_PATH = RUNTIME_DATA_DIR / "logs.json"
+TERMINAL_LOGS_JSON_PATH = RUNTIME_DATA_DIR / "terminal_logs.json"
+MAX_LOGS_PER_AUTOMATION = int(os.getenv("MAX_LOGS_PER_AUTOMATION", "200"))
+
+# =========================================================
 # System Status Tracking
 # =========================================================
 SYSTEM_STATUS = {

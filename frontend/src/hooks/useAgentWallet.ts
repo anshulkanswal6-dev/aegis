@@ -11,7 +11,8 @@ import { getExplorerUrl } from '../lib/utils/explorer';
 import { formatEth } from '../lib/utils/format';
 import { cleanWeb3Error } from '../lib/utils/errors';
 import { useToast } from './useToast';
-import { MONAD_TESTNET_ID } from '../lib/config/chains';
+import { PLATFORM_CHAIN_ID } from '../lib/config/chains';
+import { BRANDING } from '../lib/config/branding';
 
 
 export function useAgentWallet() {
@@ -75,9 +76,9 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: 'Initiating Agent Wallet creation...' });
 
     try {
-      if (chainId !== MONAD_TESTNET_ID) {
-        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
-        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      if (chainId !== PLATFORM_CHAIN_ID) {
+        addLog({ type: 'info', message: `Switching network to ${BRANDING.networkName}...` });
+        await switchChainAsync({ chainId: PLATFORM_CHAIN_ID });
       }
 
       const hash = await writeContractAsync({
@@ -117,9 +118,9 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: `Depositing ${amountEth} ${chainSymbol} to Agent Wallet...` });
 
     try {
-      if (chainId !== MONAD_TESTNET_ID) {
-        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
-        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      if (chainId !== PLATFORM_CHAIN_ID) {
+        addLog({ type: 'info', message: `Switching network to ${BRANDING.networkName}...` });
+        await switchChainAsync({ chainId: PLATFORM_CHAIN_ID });
       }
 
       const hash = await writeContractAsync({
@@ -159,9 +160,9 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: `Withdrawing ${amountEth} ${chainSymbol} from Agent Wallet...` });
 
     try {
-      if (chainId !== MONAD_TESTNET_ID) {
-        addLog({ type: 'info', message: 'Switching network to Monad Testnet...' });
-        await switchChainAsync({ chainId: MONAD_TESTNET_ID });
+      if (chainId !== PLATFORM_CHAIN_ID) {
+        addLog({ type: 'info', message: `Switching network to ${BRANDING.networkName}...` });
+        await switchChainAsync({ chainId: PLATFORM_CHAIN_ID });
       }
 
       const hash = await writeContractAsync({

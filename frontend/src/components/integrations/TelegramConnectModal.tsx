@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, ExternalLink, QrCode, CheckCircle2, Loader2, Send } from 'lucide-react';
 import { useAccount } from 'wagmi';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 interface TelegramConnectModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -35,7 +37,7 @@ const TelegramConnectModal: React.FC<TelegramConnectModalProps> = ({ isOpen, onC
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch('/api/telegram/link/init', {
+      const resp = await fetch(`${API_BASE}/api/telegram/link/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_address: address })
@@ -69,7 +71,7 @@ const TelegramConnectModal: React.FC<TelegramConnectModalProps> = ({ isOpen, onC
     if (polling && address && !connected) {
       interval = setInterval(async () => {
         try {
-          const resp = await fetch(`/api/telegram/status?wallet_address=${address}`);
+          const resp = await fetch(`${API_BASE}/api/telegram/status?wallet_address=${address}`);
           const data = await resp.json();
           if (data.connected) {
             setConnected(true);

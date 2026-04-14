@@ -42,7 +42,7 @@ export function AgentChatPanel() {
       if (!agentWalletAddress) return;
       try {
         const executor = await getExecutor();
-        const resp = await fetch('http://localhost:8002/automations/executor/address').then(r => r.json());
+        const resp = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8002'}/automations/executor/address`).then(r => r.json());
         setIsAuthorized(executor?.toLowerCase() === resp.address?.toLowerCase());
       } catch (e) {
         console.error("Auth check failed", e);

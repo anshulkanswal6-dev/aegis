@@ -201,7 +201,7 @@ export function useAgentWallet() {
     addLog({ type: 'info', message: 'Fetching platform executor address...' });
 
     try {
-      const response = await fetch('http://localhost:8002/automations/executor/address');
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8002'}/automations/executor/address`);
       const data = await response.json();
 
       if (!data.address) {

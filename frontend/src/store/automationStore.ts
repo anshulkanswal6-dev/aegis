@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-const API_BASE_URL = 'http://localhost:8002/automations';
+const API_BASE_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:8002'}/automations`;
 
 export interface DeployedAutomation {
   id: string;

@@ -62,11 +62,27 @@ app.include_router(automations_router)
 app.include_router(telegram_router, prefix="/api")
 
 # Enable CORS for frontend (production safe)
-client_origin = os.getenv("CLIENT_ORIGIN", "*")
+# CLIENT_ORIGIN can be a comma-separated list of origins, e.g.:
+#   "https://aegis-ten-woad.vercel.app,https://aegis.vercel.app"
+_raw_origin = os.getenv("CLIENT_ORIGIN", "").strip()
+
+if _raw_origin and _raw_origin != "*":
+    # Specific origin(s) — split by comma, strip whitespace
+    _allowed_origins = [o.strip().rstrip("/") for o in _raw_origin.split(",") if o.strip()]
+    # Always allow localhost for development
+    _allowed_origins += ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
+    _use_credentials = True
+else:
+    # Wildcard mode — allow all origins but disable credentials (spec requirement)
+    _allowed_origins = ["*"]
+    _use_credentials = False
+
+print(f"[CORS] Allowed origins: {_allowed_origins}, credentials: {_use_credentials}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[client_origin] if client_origin != "*" else ["*"],
-    allow_credentials=True,
+    allow_origins=_allowed_origins,
+    allow_credentials=_use_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

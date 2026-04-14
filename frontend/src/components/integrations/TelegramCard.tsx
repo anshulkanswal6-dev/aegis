@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, XCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
 /* --- Custom Confirmation Modal Component --- */
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -77,7 +79,7 @@ const TelegramCard: React.FC = () => {
 
   const fetchStatus = async () => {
     try {
-      const resp = await fetch(`/api/telegram/status?wallet_address=${address}`);
+      const resp = await fetch(`${API_BASE}/api/telegram/status?wallet_address=${address}`);
       const data = await resp.json();
       if (data.connected) {
         setConnected(true);
@@ -102,7 +104,7 @@ const TelegramCard: React.FC = () => {
   const generateToken = async () => {
     setActionLoading(true);
     try {
-      const resp = await fetch('/api/telegram/link/init', {
+      const resp = await fetch(`${API_BASE}/api/telegram/link/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_address: address })
@@ -122,7 +124,7 @@ const TelegramCard: React.FC = () => {
   const confirmUnlink = async () => {
     setActionLoading(true);
     try {
-      const resp = await fetch('/api/telegram/unlink', {
+      const resp = await fetch(`${API_BASE}/api/telegram/unlink`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_address: address })

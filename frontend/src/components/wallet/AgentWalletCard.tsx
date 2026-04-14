@@ -27,7 +27,7 @@ export function AgentWalletCard() {
       if (!agentWalletAddress) return;
       const [executor, resp] = await Promise.all([
         getExecutor(),
-        fetch('http://localhost:8002/automations/executor/address').then(r => r.json()).catch(() => ({ address: null }))
+        fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8002'}/automations/executor/address`).then(r => r.json()).catch(() => ({ address: null }))
       ]);
       setCurrentExecutor(executor);
       setPlatformAddress(resp.address);

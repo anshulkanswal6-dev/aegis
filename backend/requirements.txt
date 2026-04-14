@@ -24,3 +24,4 @@ google-generativeai==0.8.5
 # utils
 pydantic==2.12.4
 orjson==3.11.4
+pytz==2025.2

@@ -17,9 +17,9 @@ load_dotenv()
 # --- Mount Runtime API (additive — no existing routes changed) ---
 from automations_api import router as automations_router, startup_worker, shutdown_worker
 from integrations.telegram.router import router as telegram_router
-from integrations.telegram.poller import _poller
 from worker import get_worker
 from scheduler import get_scheduler
+from config import SYSTEM_STATUS, validate_config
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,15 +28,30 @@ async def lifespan(app: FastAPI):
     print("🚀 AEGIS PLATFORM BOOTING...")
     print("="*50)
     
-    await startup_worker()
-    
-    # Verify subsystems
-    w = get_worker()
-    s = get_scheduler()
-    print(f"✅ API Server: Online")
-    print(f"✅ Worker Engine: {'Active' if w.is_running else 'Inactive'}")
-    print(f"✅ Scheduler: {'Running' if s.running else 'Stopped'}")
-    print(f"✅ Telegram Poller: {'Connected' if _poller.running else 'Idle'}")
+    # 1. Inspect Environment
+    validate_config()
+
+    # 2. Start Subsystems (Safe Wrap)
+    try:
+        await startup_worker()
+        
+        # Verify subsystems
+        w = get_worker()
+        s = get_scheduler()
+        
+        SYSTEM_STATUS["worker"] = "active" if w.is_running else "failed"
+        SYSTEM_STATUS["scheduler"] = "running" if s.running else "failed"
+        # telegram status is updated inside startup_worker / start_telegram_poller logic
+        
+        print(f"✅ API Server: Online")
+        print(f"✅ Worker Engine: {SYSTEM_STATUS['worker']}")
+        print(f"✅ Scheduler: {SYSTEM_STATUS['scheduler']}")
+        print(f"✅ Telegram Poller: {SYSTEM_STATUS['telegram']}")
+    except Exception as e:
+        print(f"❌ CRITICAL SUBSYSTEM FAILURE: {e}")
+        traceback.print_exc()
+        SYSTEM_STATUS["worker"] = "error"
+
     print("="*50 + "\n")
     
     yield
@@ -83,16 +98,21 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.get("/health")
 async def health_check():
-    """Consolidated health check for all runtime systems."""
-    worker = get_worker()
-    scheduler = get_scheduler()
+    """Consolidated health check with live system status."""
+    try:
+        w = get_worker()
+        s = get_scheduler()
+        
+        # Update system status with reality check
+        SYSTEM_STATUS["worker"] = "active" if w.is_running else "stopped"
+        SYSTEM_STATUS["scheduler"] = "running" if s.running else "stopped"
+    except:
+        pass
+
     return {
-        "status": "healthy",
-        "api": "active",
-        "worker": "active" if worker.is_running else "inactive",
-        "scheduler": "running" if scheduler.running else "stopped",
-        "telegram": "connected" if _poller.running else "disconnected",
-        "env": os.getenv("STORE_BACKEND", "default")
+        "status": "online",
+        "timestamp": os.getenv("DEPLOYMENT_TIMESTAMP", "unknown"),
+        "systems": SYSTEM_STATUS
     }
 
 # --- Request Models (Synced with agentService.ts) ---

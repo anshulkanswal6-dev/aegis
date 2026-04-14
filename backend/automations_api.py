@@ -53,19 +53,45 @@ class StatusResponse(BaseModel):
 
 async def startup_worker():
     """Called on FastAPI startup to boot the worker."""
-    if WORKER_AUTOSTART:
+    from config import SYSTEM_STATUS
+    if not WORKER_AUTOSTART:
+        print("[AEGIS API] Worker autostart is disabled.")
+        return
+
+    # 1. Start Core Worker
+    try:
         worker = get_worker()
         worker.start()
-        start_telegram_poller()
-        print("[AEGIS API] Worker and Telegram Poller started.")
+        print("[AEGIS API] Core Worker Engine started.")
+    except Exception as e:
+        print(f"[AEGIS API] ERROR starting Worker: {e}")
+        SYSTEM_STATUS["worker"] = f"error: {str(e)}"
+
+    # 2. Start Telegram Poller (Lazy)
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if token:
+        try:
+            from integrations.telegram.poller import _poller
+            start_telegram_poller()
+            SYSTEM_STATUS["telegram"] = "connected"
+            print(f"[AEGIS API] Telegram Poller active (@{os.getenv('TELEGRAM_BOT_USERNAME', 'unknown')})")
+        except Exception as e:
+            print(f"[AEGIS API] ERROR starting Telegram Poller: {e}")
+            SYSTEM_STATUS["telegram"] = "error"
+    else:
+        SYSTEM_STATUS["telegram"] = "disabled (missing token)"
+        print("[AEGIS API] Telegram Poller skipped: TELEGRAM_BOT_TOKEN not found.")
 
 
 async def shutdown_worker():
     """Called on FastAPI shutdown to stop the worker."""
-    worker = get_worker()
-    worker.stop()
-    stop_telegram_poller()
-    print("[AEGIS API] Worker and Telegram Poller shut down.")
+    try:
+        worker = get_worker()
+        worker.stop()
+        stop_telegram_poller()
+        print("[AEGIS API] Subsystems shut down.")
+    except:
+        pass
 
 
 # =========================================================

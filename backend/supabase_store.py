@@ -23,12 +23,18 @@ class SupabaseStore(RuntimeStoreBase):
     """Production-grade store using Supabase."""
 
     def __init__(self):
+        self.enabled = True
         if not SUPABASE_URL or not SUPABASE_KEY:
-            raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in .env for SupabaseStore")
+            print("[SupabaseStore] WARNING: SUPABASE_URL/KEY missing. Persistence disabled.")
+            self.enabled = False
+            return
         
         # Use thread-local storage for the client to prevent SSL corruption across threads
         self._local = threading.local()
-        self._ensure_system_profile()
+        try:
+            self._ensure_system_profile()
+        except Exception as e:
+            print(f"[SupabaseStore] Initialization error during profile check: {e}")
 
     @property
     def client(self) -> Client:

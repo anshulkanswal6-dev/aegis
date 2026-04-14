@@ -63,30 +63,42 @@ DEFAULT_RPC_URL = os.getenv("RPC_URL", "https://testnet-rpc.monad.xyz")
 DEFAULT_CHAIN = os.getenv("DEFAULT_CHAIN", "monad-testnet")
 
 # =========================================================
-# Mission-Critical Validation
+# System Status Tracking
 # =========================================================
+SYSTEM_STATUS = {
+    "api": "active",
+    "worker": "pending",
+    "scheduler": "pending",
+    "telegram": "pending",
+    "storage": STORE_BACKEND,
+    "env_vars": {}
+}
+
+def check_env_vars():
+    """Build a map of critical environment variables for health checks."""
+    vars_to_check = {
+        "GEMINI_API_KEY": bool(os.getenv("GEMINI_API_KEY")),
+        "TELEGRAM_BOT_TOKEN": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
+        "SUPABASE_KEY": bool(os.getenv("SUPABASE_KEY")),
+        "EXECUTOR_PRIVATE_KEY": bool(os.getenv("EXECUTOR_PRIVATE_KEY") or os.getenv("PRIVATE_KEY")),
+        "RPC_URL": bool(os.getenv("RPC_URL")),
+    }
+    SYSTEM_STATUS["env_vars"] = vars_to_check
+    return vars_to_check
+
 def validate_config():
-    """Ensure essential variables are present for the current backend mode."""
-    critical_errors = []
+    """Return a report of the current configuration status."""
+    env = check_env_vars()
+    report = []
     
-    # 1. AI Features
-    if not os.getenv("GEMINI_API_KEY"):
-        critical_errors.append("MISSING: GEMINI_API_KEY (Required for Chat/GenAI)")
+    print("\n--- AEGIS STARTUP ENV CHECK ---")
+    for var, exists in env.items():
+        status = "✅ PRESENT" if exists else "❌ MISSING"
+        print(f"  {var.ljust(22)}: {status}")
+        if not exists:
+            report.append(var)
+    print("-------------------------------\n")
+    return report
 
-    # 2. Persistence
-    if STORE_BACKEND == "supabase":
-        if not SUPABASE_URL or not SUPABASE_KEY:
-            critical_errors.append("MISSING: SUPABASE_URL/KEY (Required for 'supabase' STORE_BACKEND)")
-    
-    # 3. Integrations
-    if not os.getenv("TELEGRAM_BOT_TOKEN"):
-        print("[Config] WARNING: TELEGRAM_BOT_TOKEN missing. Bot features will be disabled.")
-    
-    if critical_errors:
-        print("\n❌ CRITICAL CONFIGURATION ERROR:")
-        for err in critical_errors:
-            print(f"  - {err}")
-        print("\nPlease check your .env file or environment settings.\n")
-        # In production, we might want to sys.exit(1), but for now we just log/notify.
-
-validate_config()
+# Perform check on load but don't crash the module
+check_env_vars()

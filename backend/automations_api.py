@@ -263,6 +263,19 @@ async def delete_automation(automation_id: str):
         raise HTTPException(status_code=404, detail="Automation not found")
 
     return {"success": True, "message": "Automation deleted"}
+ 
+ 
+@router.patch("/{automation_id}")
+async def update_automation(automation_id: str, updates: Dict[str, Any]):
+    """Update an automation's metadata (name, description, etc)."""
+    try:
+        from runtime_service import update_automation_record
+        record = update_automation_record(automation_id, updates)
+        if not record:
+            raise HTTPException(status_code=404, detail="Automation not found")
+        return {"success": True, "automation": record.to_dict()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{automation_id}/logs")

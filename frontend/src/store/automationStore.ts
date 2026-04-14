@@ -25,6 +25,7 @@ interface AutomationState {
   fetchAutomations: () => Promise<void>;
   pauseAutomation: (id: string) => Promise<void>;
   resumeAutomation: (id: string) => Promise<void>;
+  updateAutomation: (id: string, updates: Partial<DeployedAutomation>) => Promise<void>;
   deleteAutomation: (id: string) => Promise<void>;
 }
 
@@ -74,6 +75,27 @@ export const useAutomationStore = create<AutomationState>((set) => ({
       }));
     } catch (err: any) {
       console.error('Failed to resume automation:', err);
+      throw err;
+    }
+  },
+
+  updateAutomation: async (id: string, updates: Partial<DeployedAutomation>) => {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!resp.ok) throw new Error('Failed to update automation');
+      
+      const data = await resp.json();
+      set((state) => ({
+        automations: state.automations.map((a) =>
+          a.id === id ? { ...a, ...data.automation } : a
+        ),
+      }));
+    } catch (err: any) {
+      console.error('Failed to update automation:', err);
       throw err;
     }
   },

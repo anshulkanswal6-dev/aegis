@@ -351,6 +351,12 @@ def resume_automation(automation_id: str) -> Optional[AutomationRecord]:
     return record
 
 
+def update_automation_record(automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]:
+    """Update an automation's metadata in storage."""
+    store = get_store()
+    return store.update_automation(automation_id, updates)
+
+
 def delete_automation(automation_id: str) -> bool:
     """Delete an automation from the store."""
     store = get_store()

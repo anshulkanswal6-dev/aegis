@@ -182,7 +182,7 @@ export default function LandingPage() {
                                         {p.chain || 'MON'}
                                      </span>
                                   </td>
-                                  <td className="px-6 py-4 text-xs font-medium th-text-tertiary flex items-center gap-2">
+                                  <td className="px-6 py-3 text-xs font-medium th-text-tertiary flex items-center gap-2">
                                      <Clock className="w-3.5 h-3.5" /> {new Date(p.lastUpdated).toLocaleDateString()}
                                   </td>
                                   <td className="px-6 py-3">

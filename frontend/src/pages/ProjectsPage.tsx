@@ -17,6 +17,7 @@ import { usePlaygroundStore } from '../store/playgroundStore';
 
 interface ProjectDisplay {
   id: string;
+  projectId?: string;
   name: string;
   prompt: string;
   status: 'draft' | 'active' | 'paused' | 'failed' | 'ready_for_deploy' | 'ready' | 'error';
@@ -92,7 +93,7 @@ const ProjectLogo = ({ id, name }: { id: string; name: string }) => {
 
 export default function ProjectsPage() {
   const { projects, searchQuery, setSearchQuery, selectedFilter, setSelectedFilter, fetchProjects, updateProject } = useProjectStore();
-  const { automations, fetchAutomations, pauseAutomation, resumeAutomation } = useAutomationStore();
+  const { automations, fetchAutomations, pauseAutomation, resumeAutomation, updateAutomation } = useAutomationStore();
   const navigate = useNavigate();
   const { address } = useAccount();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -133,11 +134,27 @@ export default function ProjectsPage() {
     }));
 
     const projectMap = new Map<string, ProjectDisplay>();
+    
+    // First pass: add all local projects
     localItems.forEach(item => {
       projectMap.set(item.name.toLowerCase(), item);
     });
+    
+    // Second pass: add/merge deployed automations
     deployedItems.forEach(item => {
-      projectMap.set(item.name.toLowerCase(), item);
+      const existing = projectMap.get(item.name.toLowerCase());
+      
+      // Merge logic: prefer project description if automation description is generic
+      const finalPrompt = (item.prompt === "No prompt provided" && existing?.prompt) 
+          ? existing.prompt 
+          : item.prompt;
+
+      projectMap.set(item.name.toLowerCase(), {
+        ...item,
+        prompt: finalPrompt,
+        // Preserve the project ID if we have it, for name editing later
+        projectId: (existing as any)?.id || item.id 
+      });
     });
 
     return Array.from(projectMap.values()).sort((a, b) => 
@@ -260,7 +277,14 @@ export default function ProjectsPage() {
                                  e.stopPropagation();
                                  setEditingProjectId(null);
                                  if (editedProjectName && editedProjectName !== project.name) {
-                                   await updateProject(project.id, { name: editedProjectName });
+                                   if (project.isDeployed) {
+                                     await updateAutomation(project.id, { name: editedProjectName });
+                                     if (project.projectId) {
+                                       await updateProject(project.projectId, { name: editedProjectName });
+                                     }
+                                   } else {
+                                     await updateProject(project.id, { name: editedProjectName });
+                                   }
                                  }
                                } else if (e.key === 'Escape') {
                                  e.stopPropagation();
@@ -270,7 +294,14 @@ export default function ProjectsPage() {
                              onBlur={async () => {
                                setEditingProjectId(null);
                                if (editedProjectName && editedProjectName !== project.name) {
-                                 await updateProject(project.id, { name: editedProjectName });
+                                 if (project.isDeployed) {
+                                   await updateAutomation(project.id, { name: editedProjectName });
+                                   if (project.projectId) {
+                                     await updateProject(project.projectId, { name: editedProjectName });
+                                   }
+                                 } else {
+                                   await updateProject(project.id, { name: editedProjectName });
+                                 }
                                }
                              }}
                              className="text-sm font-bold th-text tracking-tight border-b border-[var(--th-text-tertiary)] outline-none bg-transparent pb-0.5 max-w-[150px]"

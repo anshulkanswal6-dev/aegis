@@ -371,6 +371,10 @@ def action_claim_faucet(params: Dict[str, Any], ctx: ActionContext) -> Dict[str,
 from adapters import NotificationAdapter
 
 def action_send_email_notification(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, Any]:
+    # Normalize body/message
+    if not params.get("message"):
+        params["message"] = params.get("body") or params.get("email_body") or ""
+        
     validate_required_fields(params, ["to", "subject", "message"])
     validate_email(params["to"], "to")
     
@@ -442,6 +446,10 @@ def action_log_message(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, 
 
 
 def action_notify(params: Dict[str, Any], ctx: ActionContext) -> Dict[str, Any]:
+    # Normalize body/message
+    if not params.get("message"):
+        params["message"] = params.get("body") or params.get("email_body") or ""
+
     validate_required_fields(params, ["message"])
     channel = params.get("channel", "email") # default to email
     

@@ -87,6 +87,15 @@ def execute_actions(
         if isinstance(action, dict) and action.get("params"):
             action_params.update(action["params"])
 
+        # Normalize notification fields for backward compatibility
+        if action_type in ["notify", "send_email_notification"]:
+            if not action_params.get("message"):
+                action_params["message"] = action_params.get("body") or action_params.get("email_body") or "AEGIS Alert Triggered"
+            if not action_params.get("to"):
+                action_params["to"] = action_params.get("email_address") or merged.get("to")
+            if not action_params.get("subject"):
+                action_params["subject"] = action_params.get("email_subject") or "AEGIS Alert"
+
         safe_log("action_start", f"Executing action {i+1}/{len(actions)}: {action_type}", {"action_type": action_type})
 
         try:
@@ -177,7 +186,7 @@ def execute_actions(
                 elif channel == "email":
                     email_cfg = notification_cfg.get("email", {})
                     notify_params.update({
-                        "to": email_cfg.get("to") or merged.get("to"),
+                        "to": email_cfg.get("to") or merged.get("to") or email_cfg.get("email_address"),
                         "subject": email_cfg.get("subject") or email_cfg.get("email_subject") or "AEGIS Alert",
                         "message": email_cfg.get("body") or email_cfg.get("email_body") or "Automation condition met."
                     })

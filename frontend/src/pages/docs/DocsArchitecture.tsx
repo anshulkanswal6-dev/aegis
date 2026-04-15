@@ -56,7 +56,7 @@ export default function DocsArchitecture() {
               subtitle: 'Interactive Workspace & Dashboard',
               desc: 'React-based single-page application providing the project workspace, automation builder, IDE-grade code editor, real-time terminal output, and operational dashboard. Implements a reactive state management architecture with Zustand stores for cross-component synchronization. Communicates with the orchestration layer via RESTful API calls.',
               tech: ['React 18', 'TypeScript', 'Zustand', 'TailwindCSS', 'Vite', 'wagmi/ConnectKit'],
-              accent: 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950',
+              accent: 'border-blue-100 bg-blue-50 text-blue-600 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400',
             },
             {
               layer: 'L2',
@@ -64,7 +64,7 @@ export default function DocsArchitecture() {
               subtitle: 'API Gateway & Service Coordination',
               desc: 'FastAPI-based backend service that acts as the primary orchestration node. Handles API request routing, business logic execution, deployment coordination, and cross-service communication. Implements stateless request handling with dependency injection for store and service resolution. Manages the deployment pipeline from spec validation through version creation to runtime scheduling.',
               tech: ['FastAPI', 'Python 3.11+', 'Uvicorn', 'Pydantic'],
-              accent: 'border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950',
+              accent: 'border-violet-100 bg-violet-50 text-violet-600 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-400',
             },
             {
               layer: 'L3',
@@ -72,7 +72,7 @@ export default function DocsArchitecture() {
               subtitle: 'Relational Data & Object Storage',
               desc: 'Supabase-backed persistence layer providing relational storage for structured data (profiles, projects, automations, runs, logs) and object storage for versioned automation code bundles. Implements a store abstraction pattern with multiple backend support (InMemory, JSON File, Supabase) for development-to-production parity. Thread-safe connection management with per-thread client isolation for concurrent access patterns.',
               tech: ['Supabase (PostgreSQL)', 'PostgREST', 'Object Storage', 'Row-Level Security'],
-              accent: 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950',
+              accent: 'border-amber-100 bg-amber-50 text-amber-600 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400',
             },
             {
               layer: 'L4',
@@ -80,7 +80,7 @@ export default function DocsArchitecture() {
               subtitle: 'Background Worker & Scheduler',
               desc: 'Persistent background execution engine comprising an APScheduler-based job scheduler for deterministic interval execution and a background polling worker for dynamic automation discovery. Evaluates trigger conditions against live chain state, dispatches action sequences through the execution service, and manages automation lifecycle transitions. Thread-isolated database connections prevent SSL contention under concurrent load.',
               tech: ['APScheduler', 'Threading', 'Web3.py', 'Background Workers'],
-              accent: 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950',
+              accent: 'border-emerald-100 bg-emerald-50 text-emerald-600 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400',
             },
             {
               layer: 'L5',
@@ -88,7 +88,7 @@ export default function DocsArchitecture() {
               subtitle: 'External Channels & Notification Routing',
               desc: 'Multi-channel integration layer providing bidirectional communication with external platforms. Implements a long-polling Telegram bot with a full command router for remote platform control, a notification adapter with intelligent cooldown management for alert delivery, and a webhook ingestion pipeline for incoming events. Operates independently from the core execution runtime to prevent integration failures from affecting automation evaluation.',
               tech: ['Telegram Bot API', 'HTTP Polling', 'Notification Router', 'Webhook Handlers'],
-              accent: 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950',
+              accent: 'border-rose-100 bg-rose-50 text-rose-600 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400',
             },
           ].map(({ layer, name, subtitle, desc, tech, accent }) => (
             <div key={layer} className={cn("rounded-xl border p-6 th-surface", "border-[var(--th-border-strong)]")}>

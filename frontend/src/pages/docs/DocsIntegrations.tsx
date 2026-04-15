@@ -43,8 +43,8 @@ export default function DocsIntegrations() {
         <h2 className="text-lg font-extrabold th-text tracking-tight mb-6">Telegram Integration</h2>
         <div className="th-surface rounded-xl border border-[var(--th-border-strong)] p-6 space-y-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 flex items-center justify-center">
+              <MessageSquare className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold th-text">Telegram Bot — Full Remote Control Surface</h3>
@@ -119,8 +119,8 @@ export default function DocsIntegrations() {
         <h2 className="text-lg font-extrabold th-text tracking-tight mb-6">Notification System</h2>
         <div className="th-surface rounded-xl border border-[var(--th-border-strong)] p-6 space-y-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 flex items-center justify-center">
-              <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <div className="w-9 h-9 rounded-lg bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 flex items-center justify-center">
+              <Bell className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold th-text">Smart Notification Pipeline</h3>

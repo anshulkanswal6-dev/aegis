@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { Wallet, LayoutGrid, Play, ChevronRight, ChevronLeft, HelpCircle, LogOut, HomeIcon, Sun, Moon, Monitor, Puzzle, BookOpen } from 'lucide-react';
+import { Wallet, LayoutGrid, Play, ChevronRight, ChevronLeft, HelpCircle, LogOut, HomeIcon, Sun, Moon, Monitor, Puzzle, BookOpen, Store } from 'lucide-react';
 import { cn } from '../../lib/utils/cn';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useAccount, useDisconnect } from 'wagmi';
@@ -79,6 +79,27 @@ export function Sidebar() {
           </NavLink>
         ))}
 
+        {/* Marketplace — Coming Soon */}
+        <div 
+          className={cn(
+            "flex items-center rounded-md transition-all h-10 overflow-hidden group outline-none focus:outline-none th-text-secondary cursor-not-allowed border border-transparent"
+          )}
+        >
+          <div className={cn("flex items-center h-full w-full", isSidebarCollapsed ? "justify-center" : "px-3")}>
+            <Store className="w-4.5 h-4.5 opacity-70 shrink-0 transition-colors" />
+            {!isSidebarCollapsed && (
+              <>
+                <span className="ml-3 font-medium text-[13px]">Marketplace</span>
+                <div className="ml-auto flex items-center h-full">
+                  <span className="text-[7px] font-black uppercase tracking-[0.1em] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-500 border border-blue-500/40 whitespace-nowrap scale-90">
+                    Coming Soon
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
         {/* Documentation — opens in new tab */}
         <a
           href="/documentation"
@@ -88,7 +109,7 @@ export function Sidebar() {
             "flex items-center rounded-md transition-all h-10 overflow-hidden group outline-none focus:outline-none th-text-secondary hover:th-text hover:th-surface-hover border border-transparent"
           )}
         >
-          <div className={cn("flex items-center h-full w-full", isSidebarCollapsed ? "justify-center" : "px-3")}>
+          <div className={cn("flex items-center h-full w-full", isSidebarCollapsed ? "justify-center" : "px-3.5")}>
             <BookOpen className="w-4.5 h-4.5 shrink-0 transition-colors th-text-tertiary group-hover:th-text" />
             {!isSidebarCollapsed && (
               <span className="ml-3 font-medium text-[13px]">Documentation</span>

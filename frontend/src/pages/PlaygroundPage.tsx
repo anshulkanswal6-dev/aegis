@@ -41,7 +41,6 @@ export default function PlaygroundPage() {
   const chainId = useChainId();
   const config = useConfig();
   const location = useLocation();
-  const { projectId } = useParams();
   const navigate = useNavigate();
   const currentChain = config.chains.find(c => c.id === chainId);
   const [showProfile, setShowProfile] = useState(false);
@@ -114,27 +113,7 @@ export default function PlaygroundPage() {
       window.history.replaceState({}, document.title);
       return;
     }
-
-    // If we have a projectId in URL but no activeProjectId in store, or they don't match
-    if (projectId && projectId !== activeProjectId) {
-      const fetchProject = async () => {
-        const { data: project, error } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('id', projectId)
-          .single();
-
-        if (error || !project) {
-          console.error('Project not found:', error);
-          navigate('/projects');
-          return;
-        }
-
-        setProjectContext(project.id, project.name, project.description || '');
-      };
-      fetchProject();
-    }
-  }, [projectId, activeProjectId, location.state, loadAutomation, setProjectContext, navigate]);
+  }, [location.state, loadAutomation]);
 
   const [cursorPos, setCursorPos] = useState({ line: 1, column: 1 });
 
@@ -230,9 +209,7 @@ export default function PlaygroundPage() {
       <header className="h-13 border-b border-[var(--th-border-strong)] flex items-center justify-between px-5 shrink-0 th-surface relative z-50 shadow-sm">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigate('/')}>
-              <div className="w-7 h-7 rounded-lg overflow-hidden border border-[var(--th-border-strong)] bg-blue-950 flex-shrink-0">
-                 <img src={logoPng} alt="AEGIS" className="w-full h-full object-cover" />
-              </div>
+            
               <div className="flex flex-col gap-0.5">
                  <h1 className="text-[10px] font-black uppercase tracking-[0.2em] th-text opacity-90 leading-none group-hover:th-text transition-colors italic">Playground IDE</h1>
                  {intentSummary && (
@@ -364,8 +341,8 @@ export default function PlaygroundPage() {
         {!isSidebarCollapsed && <WorkspaceSidebar />}
 
         <div className="flex-1 flex overflow-hidden relative">
-          <div className="flex-1 flex flex-col min-w-0 th-surface relative">
-            <main className="flex-1 flex flex-col relative">
+          <div className="flex-1 flex flex-col min-w-0 th-surface relative overflow-hidden">
+            <main className="flex-1 flex flex-col relative min-h-0">
                {activeView === 'compile' && (
                   <div className="flex-1 flex flex-col h-full overflow-hidden" key="view-compile">
                     <div className="h-8 flex items-center th-surface-elevated border-b border-[var(--th-border-strong)] px-2 gap-0.5 overflow-x-auto custom-scrollbar-hide">
@@ -433,9 +410,7 @@ export default function PlaygroundPage() {
 
             </main>
 
-            {!isTerminalCollapsed && (
-               <TerminalPanel onClose={toggleTerminal} />
-            )}
+            <TerminalPanel onClose={toggleTerminal} isCollapsed={isTerminalCollapsed} />
 
             <footer className="h-7 th-surface-elevated border-t border-[var(--th-border-strong)] flex items-center justify-between px-6 shrink-0 z-30">
                <div className="flex items-center gap-6">

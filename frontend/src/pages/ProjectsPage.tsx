@@ -386,7 +386,8 @@ export default function ProjectsPage() {
                           if (project.isDeployed) {
                             navigate('/playground', { state: { automation: project.automation } }); 
                           } else {
-                            navigate(`/playground/${project.id}`);
+                            usePlaygroundStore.getState().setProjectContext(project.id, project.name, project.prompt);
+                            navigate('/playground');
                           }
                         }}
                         className="flex items-center gap-1.5 text-[10px] font-bold text-blue-500 hover:text-blue-400 uppercase tracking-widest transition-colors"
@@ -443,7 +444,7 @@ export default function ProjectsPage() {
         onCreated={(project) => {
           setIsModalOpen(false);
           usePlaygroundStore.getState().setProjectContext(project.id, project.name, project.description);
-          navigate(`/playground/${project.id}`);
+          navigate('/playground');
         }}
       />
     </div>

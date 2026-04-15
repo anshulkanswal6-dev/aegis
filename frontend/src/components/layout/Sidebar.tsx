@@ -42,12 +42,12 @@ export function Sidebar() {
         <img 
           src={logoPng} 
           alt="AEGIS Logo" 
-          className="w-9 h-9 rounded-lg shrink-0 cursor-pointer shadow-sm active:scale-95 transition-transform"
+          className="w-10 h-10 rounded-lg shrink-0 cursor-pointer shadow-sm active:scale-95 transition-transform"
           onClick={() => window.location.href = '/'}
         />
         {!isSidebarCollapsed && (
           <div className="overflow-hidden whitespace-nowrap">
-            <h1 className="font-black text-base tracking-tighter th-text leading-tight uppercase italic">AEGIS</h1>
+            <h1 className="font-black text-base tracking-tighter th-text leading-tight uppercase italic">AEGIS AI</h1>
             <p className="text-[10px] th-text-tertiary font-bold tracking-widest">Prompt To Onchain Jobs</p>
           </div>
         )}

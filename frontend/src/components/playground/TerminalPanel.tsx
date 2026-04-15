@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
-import { Trash2, ChevronDown, Activity, Info } from 'lucide-react';
+import { Trash2, ChevronDown, ChevronUp, Activity, Info } from 'lucide-react';
 import { cn } from '../../lib/utils/cn';
 import { usePlaygroundStore } from '../../store/playgroundStore';
 
 interface TerminalPanelProps {
   onClose?: () => void;
+  isCollapsed?: boolean;
 }
 
-export function TerminalPanel({ onClose }: TerminalPanelProps) {
+export function TerminalPanel({ onClose, isCollapsed }: TerminalPanelProps) {
   const { 
     terminalLogs,
     automationLogs,
@@ -21,22 +22,31 @@ export function TerminalPanel({ onClose }: TerminalPanelProps) {
   const logsToDisplay = currentTab === 'automation' ? (automationLogs || []) : (terminalLogs || []);
 
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && !isCollapsed) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [logsToDisplay]);
+  }, [logsToDisplay, isCollapsed]);
 
   return (
     <div 
-      className="flex flex-col th-surface scroll-smooth border-t border-[var(--th-border-strong)] relative z-40 h-[240px]"
+      className={cn(
+        "flex flex-col th-surface scroll-smooth border-t border-[var(--th-border-strong)] relative z-40 transition-all duration-300 shrink-0",
+        isCollapsed ? "h-9" : "h-[240px]"
+      )}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
 
       {/* Terminal Header */}
-      <div className="h-9 px-5 flex items-center justify-between border-b border-[var(--th-border)] th-surface shrink-0 relative z-10">
+      <div 
+         className={cn(
+           "h-9 px-5 flex items-center justify-between th-surface shrink-0 relative z-10 cursor-pointer transition-colors",
+           !isCollapsed ? "border-b border-[var(--th-border)]" : "hover:th-surface-hover"
+         )}
+         onClick={isCollapsed ? onClose : undefined}
+      >
           <div className="flex items-center gap-1.5 p-1 scale-90 -ml-1">
              <button 
-                onClick={() => setTab('compile')}
+                onClick={(e) => { e.stopPropagation(); setTab('compile'); }}
                 className={cn(
                   "px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all",
                   currentTab === 'compile' ? "th-surface th-text shadow-sm" : "th-text-tertiary hover:th-text"
@@ -45,7 +55,7 @@ export function TerminalPanel({ onClose }: TerminalPanelProps) {
                 System Logs
              </button>
              <button 
-                onClick={() => setTab('automation')}
+                onClick={(e) => { e.stopPropagation(); setTab('automation'); }}
                 className={cn(
                   "px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-md transition-all flex items-center gap-1.5",
                   currentTab === 'automation' ? "th-surface text-emerald-500 shadow-sm" : "th-text-tertiary hover:th-text"
@@ -56,21 +66,24 @@ export function TerminalPanel({ onClose }: TerminalPanelProps) {
              </button>
           </div>
          <div className="flex items-center gap-4">
-            <button 
-               onClick={clearLogs}
-               className="p-1 px-2 rounded hover:th-surface-hover flex items-center gap-1.5 transition-colors group"
-            >
-               <Trash2 className="w-3 h-3 th-text-tertiary group-hover:text-rose-500 transition-colors" />
-               <span className="text-[9px] font-black uppercase tracking-widest th-text-tertiary group-hover:text-rose-600 transition-colors">Clear</span>
-            </button>
-            {onClose && (
-              <>
-                <div className="w-px h-4 bg-[var(--th-border-strong)]" />
-                <button onClick={onClose} className="p-1 rounded hover:th-surface-hover transition-colors th-text-tertiary hover:th-text">
-                   <ChevronDown className="w-4 h-4" />
-                </button>
-              </>
+            {!isCollapsed && (
+              <button 
+                 onClick={(e) => { e.stopPropagation(); clearLogs(); }}
+                 className="p-1 px-2 rounded hover:th-surface-hover flex items-center gap-1.5 transition-colors group"
+              >
+                 <Trash2 className="w-3 h-3 th-text-tertiary group-hover:text-rose-500 transition-colors" />
+                 <span className="text-[9px] font-black uppercase tracking-widest th-text-tertiary group-hover:text-rose-600 transition-colors">Clear</span>
+              </button>
             )}
+            
+            <div className="w-px h-4 bg-[var(--th-border-strong)]" />
+            
+            <button 
+              onClick={(e) => { e.stopPropagation(); onClose?.(); }} 
+              className="p-1 rounded hover:th-surface-hover transition-colors th-text-tertiary hover:th-text"
+            >
+               {isCollapsed ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
          </div>
       </div>
 
@@ -78,7 +91,10 @@ export function TerminalPanel({ onClose }: TerminalPanelProps) {
       <div 
         ref={scrollRef}
         id="main-terminal-container"
-        className="flex-1 overflow-y-scroll p-4 pr-12 font-mono text-[11px] leading-relaxed custom-scrollbar th-surface-low min-h-0 relative"
+        className={cn(
+          "flex-1 overflow-y-scroll p-4 pr-12 font-mono text-[11px] leading-relaxed custom-scrollbar th-surface-low min-h-0 relative",
+          isCollapsed ? "hidden" : "block"
+        )}
       >
          <div className="space-y-1 pb-10">
             {logsToDisplay.length === 0 ? (
@@ -130,3 +146,4 @@ export function TerminalPanel({ onClose }: TerminalPanelProps) {
     </div>
   );
 }
+

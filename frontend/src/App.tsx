@@ -31,7 +31,6 @@ function App() {
           
           {/* Phase 2 Routes */}
           <Route path="/playground" element={<PlaygroundPage />} />
-          <Route path="/playground/:projectId" element={<PlaygroundPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />

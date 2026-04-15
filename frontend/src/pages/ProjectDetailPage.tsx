@@ -11,6 +11,7 @@ import { Button, Badge } from '../components/ui/UIPack';
 import { useState } from 'react';
 import { DangerZoneCard } from '../components/wallet/DangerZoneCard';
 import { GlobalHeader } from '../components/layout/Header';
+import { usePlaygroundStore } from '../store/playgroundStore';
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -127,7 +128,10 @@ export default function ProjectDetailPage() {
            
            <div className="flex items-center gap-4">
               <Button 
-                onClick={() => navigate(`/playground`)}
+                onClick={() => {
+                  usePlaygroundStore.getState().setProjectContext(project.id, project.name, project.prompt);
+                  navigate('/playground');
+                }}
                 className="h-12 rounded-xl bg-blue-950 text-white px-8 font-bold text-xs shadow-lg hover:translate-y-[-1px] active:translate-y-0 transition-all flex items-center gap-2"
               >
                 <Zap className="w-4 h-4" /> Open Editor

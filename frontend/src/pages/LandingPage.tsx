@@ -25,8 +25,8 @@ export default function LandingPage() {
    const { automations, fetchAutomations } = useAutomationStore();
 
    useEffect(() => {
-      fetchAutomations();
       if (address) {
+         fetchAutomations(address);
          fetchProjects(address);
       }
    }, [address, fetchProjects, fetchAutomations]);

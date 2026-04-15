@@ -204,9 +204,17 @@ async def deploy_automation(req: DeployRequest):
 
 
 @router.get("/")
-async def list_automations(status: Optional[str] = None, project_id: Optional[str] = None):
-    """List all automations, optionally filtered by status or project."""
-    automations = runtime_service.get_all_automations(status=status, project_id=project_id)
+async def list_automations(status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None):
+    """List automations scoped to the requesting user's wallet.
+    
+    Privacy: If wallet_address is provided, only automations belonging to that
+    wallet's profile are returned. This prevents cross-user data leakage.
+    """
+    automations = runtime_service.get_all_automations(
+        status=status, 
+        project_id=project_id, 
+        wallet_address=wallet_address
+    )
     return {
         "automations": [a.to_dict() for a in automations],
         "total": len(automations),

@@ -336,10 +336,10 @@ def get_active_automations() -> List[AutomationRecord]:
     return store.list_automations(status="active")
 
 
-def get_all_automations(status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
-    """Return all automations, optionally filtered by status or project."""
+def get_all_automations(status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None) -> List[AutomationRecord]:
+    """Return all automations, optionally filtered by status, project, or wallet ownership."""
     store = get_store()
-    return store.list_automations(status=status, project_id=project_id)
+    return store.list_automations(status=status, project_id=project_id, wallet_address=wallet_address)
 
 
 def pause_automation(automation_id: str) -> Optional[AutomationRecord]:

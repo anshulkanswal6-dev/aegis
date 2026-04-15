@@ -103,8 +103,8 @@ export default function ProjectsPage() {
   const [editedProjectName, setEditedProjectName] = useState("");
 
   useEffect(() => {
-    fetchAutomations();
     if (address) {
+      fetchAutomations(address);
       fetchProjects(address);
     }
   }, [fetchAutomations, fetchProjects, address]);

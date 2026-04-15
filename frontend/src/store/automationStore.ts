@@ -22,7 +22,7 @@ interface AutomationState {
   automations: DeployedAutomation[];
   isLoading: boolean;
   error: string | null;
-  fetchAutomations: () => Promise<void>;
+  fetchAutomations: (wallet?: string) => Promise<void>;
   pauseAutomation: (id: string) => Promise<void>;
   resumeAutomation: (id: string) => Promise<void>;
   updateAutomation: (id: string, updates: Partial<DeployedAutomation>) => Promise<void>;
@@ -34,10 +34,18 @@ export const useAutomationStore = create<AutomationState>((set) => ({
   isLoading: false,
   error: null,
 
-  fetchAutomations: async () => {
+  fetchAutomations: async (wallet?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const resp = await fetch(`${API_BASE_URL}/`);
+      // Build the URL with wallet_address for privacy scoping
+      const params = new URLSearchParams();
+      if (wallet) {
+        params.set('wallet_address', wallet);
+      }
+      const queryString = params.toString();
+      const url = `${API_BASE_URL}/${queryString ? `?${queryString}` : ''}`;
+      
+      const resp = await fetch(url);
       if (!resp.ok) throw new Error('Failed to fetch automations');
       const data = await resp.json();
       set({ automations: data.automations, isLoading: false });

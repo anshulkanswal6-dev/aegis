@@ -150,7 +150,7 @@ class RuntimeStoreBase(ABC):
     def get_automation(self, automation_id: str) -> Optional[AutomationRecord]: ...
 
     @abstractmethod
-    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]: ...
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None) -> List[AutomationRecord]: ...
 
     @abstractmethod
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]: ...
@@ -228,7 +228,7 @@ class InMemoryStore(RuntimeStoreBase):
             d = self._automations.get(automation_id)
             return AutomationRecord.from_dict(d) if d else None
 
-    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None) -> List[AutomationRecord]:
         with self._lock:
             items = list(self._automations.values())
         records = [AutomationRecord.from_dict(d) for d in items]
@@ -236,6 +236,9 @@ class InMemoryStore(RuntimeStoreBase):
             records = [r for r in records if r.status == status]
         if project_id:
             records = [r for r in records if r.project_id == project_id]
+        if wallet_address:
+            normalized = wallet_address.lower()
+            records = [r for r in records if r.wallet_address and r.wallet_address.lower() == normalized]
         return records
 
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]:
@@ -390,7 +393,7 @@ class JsonFileStore(RuntimeStoreBase):
             d = self._automations.get(automation_id)
             return AutomationRecord.from_dict(d) if d else None
 
-    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None) -> List[AutomationRecord]:
         with self._lock:
             self._reload()
             items = list(self._automations.values())
@@ -399,6 +402,9 @@ class JsonFileStore(RuntimeStoreBase):
             records = [r for r in records if r.status == status]
         if project_id:
             records = [r for r in records if r.project_id == project_id]
+        if wallet_address:
+            normalized = wallet_address.lower()
+            records = [r for r in records if r.wallet_address and r.wallet_address.lower() == normalized]
         return records
 
     def update_automation(self, automation_id: str, updates: Dict[str, Any]) -> Optional[AutomationRecord]:

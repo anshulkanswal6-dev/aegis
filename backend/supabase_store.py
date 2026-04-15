@@ -219,12 +219,28 @@ class SupabaseStore(RuntimeStoreBase):
             print(f"[SupabaseStore] Could not fetch files for {automation_id}: {e}")
             return {}
 
-    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None) -> List[AutomationRecord]:
+    def list_automations(self, status: Optional[str] = None, project_id: Optional[str] = None, wallet_address: Optional[str] = None) -> List[AutomationRecord]:
         query = self.client.table("automations").select("*")
         if status:
             query = query.eq("status", status)
         if project_id:
             query = query.eq("project_id", project_id)
+        
+        # Privacy: scope to the requesting user's profile
+        if wallet_address:
+            normalized = wallet_address.lower()
+            # Resolve wallet to profile ID
+            profile_res = self.client.table("profiles").select("id").eq("wallet_address", normalized).execute()
+            if not profile_res.data:
+                # Try original casing (legacy rows)
+                profile_res = self.client.table("profiles").select("id").eq("wallet_address", wallet_address).execute()
+            
+            if profile_res.data:
+                user_id = profile_res.data[0]["id"]
+                query = query.eq("user_id", user_id)
+            else:
+                # No profile found for this wallet — return empty (they own nothing)
+                return []
         
         result = query.execute()
         records = [AutomationRecord.from_dict(d) for d in result.data]

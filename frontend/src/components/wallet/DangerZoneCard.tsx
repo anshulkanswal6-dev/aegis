@@ -36,13 +36,13 @@ export function DangerZoneCard() {
         </div>
 
         <Button
-          variant="outline"
+          variant="danger"
           onClick={() => setShowModal(true)}
           isLoading={isWithdrawing}
-          className="w-full h-12 rounded-xl !border-white/40 !text-white font-bold text-xs !hover:bg-white !hover:text-black transition-all flex items-center justify-center gap-2 group/btn"
+          className="w-full h-12 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 group/btn"
         >
           <span>Delete Agent</span>
-          <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 !group-hover/btn:text-black transition-transform" />
+          <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
         </Button>
       </div>
 

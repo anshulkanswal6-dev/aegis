@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate, Link } from "react-router-dom";
 import logo from "../assets/Aegis-logo.jpeg";
+import ssImg from "../assets/ss.png";
 
 // Inline Button Component
 const Button = React.forwardRef(
@@ -199,14 +200,11 @@ const Hero = React.memo(({ onGetStarted }: { onGetStarted: () => void }) => {
         <div className="absolute -inset-2 shadow-[0_0_40px_rgba(249,115,22,0.15)] z-0 rounded-3xl pointer-events-none"></div>
 
         <div className="relative z-10 p-1.5 rounded-2xl bg-gray-900/50 border border-gray-700/50 backdrop-blur-xl shadow-2xl overflow-hidden aspect-video">
-          <iframe
-            className="w-full h-full rounded-xl"
-            src="https://www.youtube.com/embed/gu8FRINJjB8?rel=0"
-            title="AEGIS AI - Prompt to Onchain Jobs"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          ></iframe>
+          <img
+            src={ssImg}
+            alt="AEGIS AI Showcase"
+            className="w-full h-full object-cover rounded-xl"
+          />
         </div>
       </div>
     </section>

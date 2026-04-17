@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppShell } from './app/AppShell';
 import LandingPage from './pages/LandingPage';
+import MarketingPage from './pages/MarketingPage';
 import WalletPage from './pages/WalletPage';
 import PlaygroundPage from './pages/PlaygroundPage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -26,7 +27,8 @@ function App() {
     <Router>
       <AppShell>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<MarketingPage />} />
+          <Route path="/onboarding" element={<LandingPage />} />
           <Route path="/wallet" element={<WalletPage />} />
           
           {/* Phase 2 Routes */}

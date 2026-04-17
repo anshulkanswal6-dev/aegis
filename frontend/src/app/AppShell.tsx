@@ -13,6 +13,11 @@ export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const isPlayground = location.pathname.startsWith('/playground');
   const isDocs = location.pathname.startsWith('/documentation');
+  const isMarketing = location.pathname === '/';
+
+  if (isMarketing) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen th-bg th-text font-sans flex overflow-x-hidden theme-transition">

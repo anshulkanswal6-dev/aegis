@@ -27,16 +27,16 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({ isOpen, onClose, onConfirm,
           </div>
           <h3 className="mb-2 text-lg font-bold text-text-primary">{title}</h3>
           <p className="mb-8 text-sm text-text-secondary leading-relaxed">{message}</p>
-          
+
           <div className="flex w-full gap-3 mt-4">
-            <button 
+            <button
               onClick={onClose}
               disabled={isLoading}
               className="flex-1 rounded-xl border border-outline bg-surface px-4 py-2.5 text-sm font-bold text-text-secondary hover:bg-surface-hover transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
-            <button 
+            <button
               onClick={onConfirm}
               disabled={isLoading}
               className="flex-1 rounded-xl bg-[#1a1a4a] px-4 py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
@@ -60,13 +60,13 @@ const TelegramCard: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // Custom Modal State
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (address) {
-        fetchStatus();
+      fetchStatus();
     }
   }, [address]);
 
@@ -153,16 +153,16 @@ const TelegramCard: React.FC = () => {
     <>
       <div className="w-full max-w-2xl overflow-hidden rounded-lg border border-outline bg-surface transition-all shadow-sm">
         {/* Header Row */}
-        <div 
+        <div
           onClick={handleToggle}
           className="flex items-center justify-between p-3 cursor-pointer hover:bg-surface-hover transition-colors"
         >
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full shadow-sm">
-              <img 
-                  src={teleLogo} 
-                  alt="Telegram"
-                  className="h-full w-full object-cover"
+              <img
+                src={teleLogo}
+                alt="Telegram"
+                className="h-full w-full object-cover"
               />
             </div>
             <span className="text-sm font-bold text-text-primary">Telegram</span>
@@ -207,21 +207,21 @@ const TelegramCard: React.FC = () => {
                   <div className="space-y-2 text-center md:text-left">
                     <div className="flex flex-col gap-1">
                       <p className="text-xs mb-1 font-bold text-text-primary">1. Scan QR or click link</p>
-                      <a 
-                        href={deepLink || '#'} 
-                        target="_blank" 
+                      <a
+                        href={deepLink || '#'}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-[10px] text-blue-500 font-bold flex flex-row items-center justify-center md:justify-start gap-1 hover:underline px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 w-fit mx-auto md:mx-0"
                       >
                         Open Telegram <ExternalLink className="h-3 w-3" />
                       </a>
                     </div>
-                    
+
                     <p className="text-xs font-bold text-text-primary">2. Press "START" in the bot</p>
                   </div>
 
                   <div className="pt-2">
-                    <button 
+                    <button
                       onClick={(e) => { e.stopPropagation(); setIsConfirmOpen(true); }}
                       disabled={actionLoading}
                       className="flex items-center gap-2 rounded bg-rose-500/10 px-4 py-2 text-[11px] font-bold text-rose-500 border border-rose-500/20 hover:bg-rose-500/20 transition-colors w-full justify-center"
@@ -234,32 +234,32 @@ const TelegramCard: React.FC = () => {
 
                 {/* Right Side: Clickable QR Code */}
                 <div className="flex flex-col items-center gap-2 shrink-0">
-                  <a 
-                      href={deepLink || '#'} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className={`h-24 w-24 bg-white border border-outline rounded p-1 shadow-sm transition-transform hover:scale-105 active:scale-95 ${!deepLink ? 'pointer-events-none opacity-50' : ''}`}
+                  <a
+                    href={deepLink || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`h-24 w-24 bg-white border border-outline rounded p-1 shadow-sm transition-transform hover:scale-105 active:scale-95 ${!deepLink ? 'pointer-events-none opacity-50' : ''}`}
                   >
-                      {deepLink && !connected ? (
-                        <div className="p-1 bg-white h-full w-full">
-                          <img 
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(deepLink)}`}
-                            alt="Click to Open Telegram"
-                            className="h-full w-full"
-                          />
-                        </div>
-                      ) : connected ? (
-                          <div className="h-full w-full bg-green-500/10 flex items-center justify-center rounded">
-                              <CheckCircle2 className="h-8 w-8 text-green-500" />
-                          </div>
-                      ) : (
-                        <div className="h-full w-full bg-surface-low flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
-                        </div>
-                      )}
+                    {deepLink && !connected ? (
+                      <div className="p-1 bg-white h-full w-full">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=96x96&data=${encodeURIComponent(deepLink)}`}
+                          alt="Click to Open Telegram"
+                          className="h-full w-full"
+                        />
+                      </div>
+                    ) : connected ? (
+                      <div className="h-full w-full bg-green-500/10 flex items-center justify-center rounded">
+                        <CheckCircle2 className="h-8 w-8 text-green-500" />
+                      </div>
+                    ) : (
+                      <div className="h-full w-full bg-surface-low flex items-center justify-center">
+                        <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+                      </div>
+                    )}
                   </a>
                   <p className="text-[10px] text-text-tertiary font-medium">
-                      {connected ? "Linked" : "Tap QR to Open Bot"}
+                    {connected ? "Linked" : "Tap QR to Open Bot"}
                   </p>
                   {!connected && (
                     <div className="flex items-center gap-1.5 text-[9px] text-text-tertiary">
@@ -275,7 +275,7 @@ const TelegramCard: React.FC = () => {
       </div>
 
       {/* Confirmation Modal */}
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={isConfirmOpen}
         onClose={() => setIsConfirmOpen(false)}
         onConfirm={confirmUnlink}
